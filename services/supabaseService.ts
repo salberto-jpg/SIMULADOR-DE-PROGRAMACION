@@ -95,8 +95,8 @@ export const fetchBatches = async (): Promise<Batch[]> => {
       pieces: Number(b.pieces || 0),
       strikesPerPiece: Number(b.strikes_per_piece || b.strikesPerPiece || 0),
       trams: Number(b.trams || 0),
-      turn_time: Number(b.turn_time || b.turnTime || 0),
-      rotate_time: Number(b.rotate_time || b.rotateTime || 0),
+      turnTime: Number(b.turn_time || b.turnTime || 0),
+      rotateTime: Number(b.rotate_time || b.rotateTime || 0),
       useCraneTurn: b.use_crane_turn || b.useCraneTurn || false,
       useCraneRotate: b.use_crane_rotate || b.useCraneRotate || false,
       requiresToolChange: b.requires_tool_change || b.requiresToolChange || false,
@@ -204,6 +204,34 @@ export const saveTimeStudy = async (record: TimeRecord) => {
     return !error;
   } catch (e) {
     return false;
+  }
+};
+
+/**
+ * Elimina un lote de la base de datos de Supabase.
+ */
+export const deleteBatchFromCloud = async (id: string) => {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from('batches').delete().eq('id', id);
+    if (error) handleError(error, "Eliminar Lote Nube");
+  } catch (e) {
+    handleError(e, "Excepción eliminar lote");
+  }
+};
+
+/**
+ * Elimina un registro de estudio de tiempo de la base de datos de Supabase.
+ */
+export const deleteTimeRecordFromCloud = async (id: string) => {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from('time_study').delete().eq('id', id);
+    if (error) handleError(error, "Eliminar Registro Tiempo Nube");
+  } catch (e) {
+    handleError(e, "Excepción eliminar registro tiempo");
   }
 };
 

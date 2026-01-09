@@ -14,7 +14,9 @@ import {
   logMachineConfig, 
   saveTimeStudy,
   checkCloudStatus,
-  fetchTimeRecords
+  fetchTimeRecords,
+  deleteBatchFromCloud,
+  deleteTimeRecordFromCloud
 } from './services/supabaseService';
 
 const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
@@ -41,15 +43,11 @@ const HistoryModal: React.FC<{
 }> = ({ isOpen, onClose, records, machines, onDeleteRecord }) => {
   const [selectedParam, setSelectedParam] = useState<string | null>(null);
 
-  // Agrupamos registros por parámetro (la descripción del desplegable)
   const groupedByParam = useMemo(() => {
     const groups: Record<string, { label: string, records: TimeRecord[] }> = {};
-    
-    // Inicializar grupos basados en PARAM_LABELS para que siempre aparezcan
     Object.entries(PARAM_LABELS).forEach(([key, label]) => {
       groups[key] = { label, records: [] };
     });
-
     records.forEach(rec => {
       if (groups[rec.parameter]) {
         groups[rec.parameter].records.push(rec);
@@ -61,108 +59,107 @@ const HistoryModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-      <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
-        <div className="p-8 border-b flex justify-between items-center bg-slate-900 text-white">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/90 backdrop-blur-md">
+      <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[90vh] overflow-hidden border border-slate-200 animate-in slide-in-from-bottom duration-300">
+        
+        {/* Header Dinámico */}
+        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
           <div>
-            <h3 className="text-2xl font-black tracking-tight uppercase">Historial de Tiempos</h3>
-            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.3em] mt-1">Registros de campo vs Configuración</p>
+            <h3 className="text-xl sm:text-2xl font-black tracking-tight uppercase leading-none">Historial de Tiempos</h3>
+            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.3em] mt-2">Relevamientos vs Teoría</p>
           </div>
-          <button onClick={onClose} className="text-white hover:text-slate-300 text-4xl font-light transition-transform hover:rotate-90">&times;</button>
+          <button onClick={onClose} className="text-white hover:text-slate-300 text-4xl font-light p-2">&times;</button>
         </div>
         
-        <div className="flex-1 overflow-hidden flex bg-slate-50">
-          {/* Menú Lateral: Parámetros */}
-          <div className="w-64 border-r border-slate-200 overflow-y-auto p-6 space-y-3 bg-white">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Seleccionar Tipo</h4>
-            {Object.entries(groupedByParam).map(([key, group]) => (
-              <button
-                key={key}
-                onClick={() => setSelectedParam(key)}
-                className={`w-full text-left p-4 rounded-2xl transition-all border ${
-                  selectedParam === key 
-                  ? 'bg-blue-600 text-white border-blue-700 shadow-lg shadow-blue-600/20 translate-x-1' 
-                  : 'bg-slate-50 text-slate-600 border-transparent hover:bg-slate-100'
-                }`}
-              >
-                <div className="text-xs font-black uppercase tracking-tight">{group.label}</div>
-                <div className={`text-[9px] font-bold mt-1 ${selectedParam === key ? 'text-blue-200' : 'text-slate-400'}`}>
-                  {group.records.length} REGISTROS
-                </div>
-              </button>
-            ))}
+        <div className="flex-1 overflow-hidden flex flex-col sm:flex-row bg-slate-50">
+          <div className="w-full sm:w-64 border-b sm:border-r border-slate-200 shrink-0 bg-white">
+            <div className="flex sm:flex-col overflow-x-auto sm:overflow-y-auto p-4 sm:p-6 gap-3 scrollbar-hide">
+              <h4 className="hidden sm:block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Tipo de Parámetro</h4>
+              {(Object.entries(groupedByParam) as [string, { label: string, records: TimeRecord[] }][]).map(([key, group]) => (
+                <button
+                  key={key}
+                  onClick={() => setSelectedParam(key)}
+                  className={`whitespace-nowrap sm:whitespace-normal text-left px-5 py-4 sm:p-4 rounded-2xl transition-all border shrink-0 sm:shrink ${
+                    selectedParam === key 
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-lg shadow-blue-600/20' 
+                    : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-[11px] sm:text-xs font-black uppercase tracking-tight">{group.label}</div>
+                  <div className={`text-[9px] font-bold mt-0.5 ${selectedParam === key ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {group.records.length} REG.
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Panel Principal: Detalle */}
-          <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-slate-50 scrollbar-hide">
+          <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-8 scrollbar-hide">
             {!selectedParam ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300">
-                <div className="w-20 h-20 mb-6 bg-slate-100 rounded-full flex items-center justify-center">
-                  <svg className="w-10 h-10 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
+                <div className="w-16 h-16 mb-6 bg-slate-100 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
-                <p className="text-xs font-black uppercase tracking-[0.2em]">Selecciona un parámetro para analizar</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Elige un parámetro para ver detalle</p>
               </div>
             ) : (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* 1. Datos de Configuración por Plegadora */}
-                <div className="mb-8">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Configuración Actual en Plegadoras</h5>
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-400">
+                <section className="mb-10">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
+                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em]">Configuración Actual</h5>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-3 gap-3 sm:gap-4">
                     {machines.map(m => (
-                      <div key={m.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{m.id}</div>
-                        <div className="text-xl font-mono font-black text-slate-800 mt-1">
+                      <div key={m.id} className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm text-center sm:text-left">
+                        <div className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.id}</div>
+                        <div className="text-sm sm:text-xl font-mono font-black text-slate-800 mt-1 truncate">
                           {(m[selectedParam as keyof MachineConfig] as number)?.toFixed(4)}
-                          <span className="text-[10px] text-slate-400 ml-1">min</span>
                         </div>
+                        <div className="text-[8px] text-slate-400 font-bold uppercase mt-1">minutos</div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
 
-                {/* 2. Listado de Tiempos Relevados */}
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-1.5 h-6 bg-orange-500 rounded-full"></div>
-                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Capturas de Campo (Cronómetro)</h5>
+                <section>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
+                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em]">Registros en Planta</h5>
                   </div>
                   {groupedByParam[selectedParam].records.length === 0 ? (
-                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-[32px] p-12 text-center text-slate-300 text-xs font-bold uppercase tracking-widest">
-                      Sin relevamientos para este parámetro
+                    <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-10 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest">
+                      Sin datos relevados aún
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {groupedByParam[selectedParam].records.map(rec => (
-                        <div key={rec.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-center group hover:border-blue-200 transition-colors">
-                          <div className="flex items-center gap-6">
-                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center font-black text-slate-400 text-xs border border-slate-100">
+                        <div key={rec.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm flex justify-between items-center hover:border-blue-100 transition-all">
+                          <div className="flex items-center gap-4 sm:gap-6">
+                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center font-black text-slate-400 text-[9px] border border-slate-100">
                               {rec.machineId}
                             </div>
                             <div>
-                              <div className="text-2xl font-mono font-black text-slate-800 tabular-nums">
-                                {rec.value.toFixed(4)} <span className="text-[10px] text-slate-400 uppercase ml-1">min</span>
+                              <div className="text-xl sm:text-2xl font-mono font-black text-slate-800 tabular-nums">
+                                {rec.value.toFixed(4)} <span className="text-[9px] text-slate-400 uppercase font-bold ml-1">min</span>
                               </div>
-                              <div className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-2">
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <div className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-1.5">
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                                 {rec.timestamp}
                               </div>
                             </div>
                           </div>
                           <button 
                             onClick={() => onDeleteRecord(rec.id)} 
-                            className="text-slate-200 hover:text-red-500 p-3 rounded-xl hover:bg-red-50 transition-all"
-                            title="Eliminar registro"
+                            className="text-slate-200 hover:text-red-500 p-2 sm:p-3 rounded-xl transition-all"
                           >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               </div>
             )}
           </div>
@@ -172,7 +169,7 @@ const HistoryModal: React.FC<{
   );
 };
 
-// MODAL DE PROGRAMACIÓN DE LOTE
+// MODAL DE PROGRAMACIÓN
 const BatchModal: React.FC<{ 
   isOpen: boolean;
   onClose: () => void;
@@ -200,12 +197,6 @@ const BatchModal: React.FC<{
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAddBatch(formData);
-    onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden">
@@ -214,7 +205,7 @@ const BatchModal: React.FC<{
           <button onClick={onClose} className="text-white text-3xl font-light">&times;</button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-white space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={(e) => { e.preventDefault(); onAddBatch(formData); onClose(); }} className="space-y-5">
             <div>
               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Trabajo / Pedido</label>
               <input type="text" className="w-full border-2 border-slate-100 rounded-xl p-3 focus:border-blue-600 outline-none font-bold text-lg" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required placeholder="Ej: Pedido #9921" />
@@ -255,7 +246,7 @@ const BatchModal: React.FC<{
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Giro (min)</label>
-                <input type="number" step="0.01" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} />
+                <input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} />
               </div>
             </div>
 
@@ -263,11 +254,6 @@ const BatchModal: React.FC<{
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneTurn} onChange={e => setFormData({...formData, useCraneTurn: e.target.checked})} /> Usar Puente Grúa (Volteo)</label>
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneRotate} onChange={e => setFormData({...formData, useCraneRotate: e.target.checked})} /> Usar Puente Grúa (Giro)</label>
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.requiresToolChange} onChange={e => setFormData({...formData, requiresToolChange: e.target.checked})} /> Requiere Cambio de Herramientas</label>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Notas Adicionales</label>
-              <textarea className="w-full border-2 border-slate-100 rounded-xl p-3 focus:border-blue-600 outline-none font-medium text-sm" rows={2} value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} placeholder="Instrucciones específicas..."></textarea>
             </div>
 
             <button type="submit" className="w-full bg-blue-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-100 active:scale-95 transition-all">Ejecutar Programación</button>
@@ -281,9 +267,8 @@ const BatchModal: React.FC<{
 // MODAL DEL CRONÓMETRO
 const StopwatchModal: React.FC<{
   isOpen: boolean; onClose: () => void; machines: MachineConfig[];
-  onUpdateMachineValue: (machineId: string, param: keyof MachineConfig, value: number) => void;
   onSaveRecord: (rec: TimeRecord) => void;
-}> = ({ isOpen, onClose, machines, onUpdateMachineValue, onSaveRecord }) => {
+}> = ({ isOpen, onClose, machines, onSaveRecord }) => {
   const [activeMachineId, setActiveMachineId] = useState(machines[0]?.id || '');
   const [activeParam, setActiveParam] = useState<keyof MachineConfig>('strikeTime');
   const [time, setTime] = useState(0); 
@@ -319,7 +304,6 @@ const StopwatchModal: React.FC<{
              {time.toFixed(2)}<span className="text-2xl ml-1 text-slate-600 italic">s</span>
            </div>
         </div>
-        
         <div className="p-8 space-y-6 flex-1 bg-slate-900">
            <div className="grid grid-cols-2 gap-3">
               <select className="bg-slate-800 border border-slate-700 text-white rounded-2xl p-3 font-bold text-xs" value={activeMachineId} onChange={e => setActiveMachineId(e.target.value)}>
@@ -331,25 +315,22 @@ const StopwatchModal: React.FC<{
                 ))}
               </select>
            </div>
-           
            <div className="grid grid-cols-3 gap-3">
               <button onClick={() => setIsRunning(!isRunning)} className={`aspect-square flex flex-col items-center justify-center rounded-3xl font-black transition-all active:scale-90 ${isRunning ? 'bg-slate-800 text-orange-500' : 'bg-orange-500 text-white'}`}>
                 {isRunning ? <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> : <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 <span className="text-[10px] mt-1 uppercase tracking-tighter">{isRunning ? 'Pausa' : 'Inicio'}</span>
               </button>
-
               <button onClick={handleCapture} disabled={time <= 0} className="aspect-square flex flex-col items-center justify-center rounded-3xl bg-blue-600 text-white font-black shadow-lg shadow-blue-500/20 disabled:opacity-20 active:scale-90 transition-all">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                 <span className="text-[10px] mt-1 uppercase tracking-tighter">Captura</span>
               </button>
-
               <button onClick={() => { setTime(0); setIsRunning(false); }} className="aspect-square flex flex-col items-center justify-center rounded-3xl bg-slate-800 text-slate-400 font-black border border-slate-700 active:scale-90 transition-all">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 <span className="text-[10px] mt-1 uppercase tracking-tighter">Reset</span>
               </button>
            </div>
         </div>
-        <button onClick={onClose} className="p-6 bg-slate-800 text-slate-500 font-black uppercase tracking-[0.2em] text-[10px] border-t border-slate-700 active:bg-slate-700">Cerrar</button>
+        <button onClick={onClose} className="p-6 bg-slate-800 text-slate-500 font-black uppercase tracking-[0.2em] text-[10px] border-t border-slate-700">Cerrar</button>
       </div>
     </div>
   );
@@ -389,7 +370,7 @@ const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDele
             <div key={day.date} className="bg-slate-50 rounded-3xl p-5 border border-slate-100">
               <div className="flex justify-between items-center mb-4">
                 <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest bg-white px-3 py-1.5 rounded-xl border border-slate-200">{day.date}</span>
-                <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl ${day.capacityPercentage > 90 ? 'bg-red-500 text-white' : 'bg-blue-700 text-white shadow-lg shadow-blue-700/20'}`}>{day.capacityPercentage.toFixed(0)}%</span>
+                <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl ${day.capacityPercentage > 90 ? 'bg-red-500 text-white' : 'bg-blue-700 text-white'}`}>{day.capacityPercentage.toFixed(0)}%</span>
               </div>
               <div className="space-y-3">
                 {day.batches.map(b => (
@@ -410,61 +391,147 @@ const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDele
   );
 };
 
-// MODAL DE AJUSTES
-const SettingsModal: React.FC<{ isOpen: boolean, onClose: () => void, machines: MachineConfig[], onSave: (newMachines: MachineConfig[]) => void }> = ({ isOpen, onClose, machines, onSave }) => {
+// MODAL DE AJUSTES: CON SELECTOR DE BOTONES PREMIUM
+const SettingsModal: React.FC<{ 
+  isOpen: boolean, 
+  onClose: () => void, 
+  machines: MachineConfig[], 
+  onSave: (newMachines: MachineConfig[]) => void 
+}> = ({ isOpen, onClose, machines, onSave }) => {
   const [localMachines, setLocalMachines] = useState<MachineConfig[]>([]);
-  useEffect(() => { if (isOpen) setLocalMachines(JSON.parse(JSON.stringify(machines))); }, [isOpen, machines]);
+  const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
+
+  useEffect(() => { 
+    if (isOpen) {
+      setLocalMachines(JSON.parse(JSON.stringify(machines))); 
+      setEditingMachineId(null);
+    }
+  }, [isOpen, machines]);
+
   if (!isOpen) return null;
-  const updateField = (id: string, field: keyof MachineConfig, value: any) => setLocalMachines(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
+
+  const updateField = (id: string, field: keyof MachineConfig, value: any) => 
+    setLocalMachines(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
+
+  const currentMachine = localMachines.find(m => m.id === editingMachineId);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="p-8 border-b flex justify-between items-center bg-slate-900 text-white">
-          <h3 className="text-2xl font-black uppercase tracking-tight">Parámetros por Plegadora</h3>
-          <button onClick={onClose} className="text-white text-4xl font-light">&times;</button>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-md p-0 sm:p-4">
+      <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
+        
+        {/* Header Dinámico */}
+        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
+          <div className="flex items-center gap-4">
+            {editingMachineId && (
+              <button 
+                onClick={() => setEditingMachineId(null)}
+                className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+              </button>
+            )}
+            <div>
+              <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none">
+                {editingMachineId ? `Config: ${editingMachineId}` : 'Parámetros por Plegadora'}
+              </h3>
+              {!editingMachineId && <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-2">Seleccione una máquina para editar</p>}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white text-4xl font-light p-2">&times;</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-50 space-y-6">
-           {localMachines.map(m => (
-             <div key={m.id} className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-5">
-                <div className="flex justify-between items-center border-b pb-4 mb-4">
-                   <div className="flex-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Identificador</label>
-                      <h4 className="font-black text-slate-900 text-xl uppercase tracking-tight">{m.id}</h4>
-                   </div>
-                   <div className="flex-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Nombre Comercial</label>
-                      <input type="text" className="w-full border-2 border-slate-100 p-2 rounded-xl font-bold text-sm" value={m.name} onChange={e => updateField(m.id, 'name', e.target.value)} />
-                   </div>
-                </div>
 
-                <div className="mb-4">
-                   <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Descripción / Especialidad</label>
-                   <input type="text" className="w-full border-2 border-slate-100 p-3 rounded-xl font-medium text-sm" value={m.description} onChange={e => updateField(m.id, 'description', e.target.value)} />
-                </div>
+        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50 scrollbar-hide">
+          {!editingMachineId ? (
+            /* VISTA 1: Selector de Máquinas (Botones Grandes) */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
+              {localMachines.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setEditingMachineId(m.id)}
+                  className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/10 transition-all text-left group active:scale-95"
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                      {m.id}
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                    </div>
+                  </div>
+                  <h4 className="font-black text-slate-900 text-lg uppercase leading-tight mb-1">{m.name}</h4>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{m.description || 'Configuración general'}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* VISTA 2: Editor de Máquina Individual */
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              {currentMachine && (
+                <div className="bg-white p-6 sm:p-10 rounded-[40px] border border-slate-200 shadow-sm space-y-10">
+                  
+                  {/* Sección 1: Identificación */}
+                  <div>
+                    <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Información Básica</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nombre Comercial</label>
+                        <input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.name} onChange={e => updateField(currentMachine.id, 'name', e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Descripción Corta</label>
+                        <input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-medium text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.description} onChange={e => updateField(currentMachine.id, 'description', e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Golpe (min)</label><input type="number" step="0.001" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.strikeTime} onChange={e => updateField(m.id, 'strikeTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Cambio Herram. (min)</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.toolChangeTime} onChange={e => updateField(m.id, 'toolChangeTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Tiempo Tramo (min)</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.tramTime} onChange={e => updateField(m.id, 'tramTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Eficiencia %</label><input type="number" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.efficiency} onChange={e => updateField(m.id, 'efficiency', parseInt(e.target.value))} /></div>
-                </div>
+                  {/* Sección 2: Productividad */}
+                  <div>
+                    <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Capacidad y Eficiencia</h5>
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Eficiencia %</label><input type="number" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.efficiency} onChange={e => updateField(currentMachine.id, 'efficiency', parseInt(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.productiveHours} onChange={e => updateField(currentMachine.id, 'productiveHours', parseFloat(e.target.value))} /></div>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-4 border-t border-slate-50">
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo con puente de grúa (min)</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.craneTurnTime} onChange={e => updateField(m.id, 'craneTurnTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro con puente de grúa (min)</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.craneRotateTime} onChange={e => updateField(m.id, 'craneRotateTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo (min)</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.manualTurnTime} onChange={e => updateField(m.id, 'manualTurnTime', parseFloat(e.target.value))} /></div>
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro (min)</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.manualRotateTime} onChange={e => updateField(m.id, 'manualRotateTime', parseFloat(e.target.value))} /></div>
-                </div>
+                  {/* Sección 3: Tiempos Base */}
+                  <div>
+                    <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Ciclos de Trabajo (min)</h5>
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Veloc. Golpe</label><input type="number" step="0.001" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.strikeTime} onChange={e => updateField(currentMachine.id, 'strikeTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Cambio Herram.</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.toolChangeTime} onChange={e => updateField(currentMachine.id, 'toolChangeTime', parseFloat(e.target.value))} /></div>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-50">
-                   <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas Productivas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-3 rounded-2xl font-bold" value={m.productiveHours} onChange={e => updateField(m.id, 'productiveHours', parseFloat(e.target.value))} /></div>
+                  {/* Sección 4: Maniobras */}
+                  <div>
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 border-b pb-2">Maniobras Específicas</h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualTurnTime} onChange={e => updateField(currentMachine.id, 'manualTurnTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualRotateTime} onChange={e => updateField(currentMachine.id, 'manualRotateTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneTurnTime} onChange={e => updateField(currentMachine.id, 'craneTurnTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneRotateTime} onChange={e => updateField(currentMachine.id, 'craneRotateTime', parseFloat(e.target.value))} /></div>
+                    </div>
+                  </div>
                 </div>
-             </div>
-           ))}
+              )}
+            </div>
+          )}
         </div>
-        <div className="p-8 border-t bg-white flex justify-end gap-4">
-          <button onClick={onClose} className="px-8 py-4 font-black text-slate-400 uppercase text-xs tracking-widest">Cancelar</button>
-          <button onClick={() => { onSave(localMachines); onClose(); }} className="px-10 py-4 bg-blue-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-700/30 active:scale-95 transition-all">Guardar Configuración</button>
+
+        <div className="p-6 sm:p-8 border-t bg-white flex justify-between items-center shrink-0">
+          <button 
+            onClick={onClose} 
+            className="px-6 py-4 font-black text-slate-400 uppercase text-[10px] tracking-widest hover:text-slate-600"
+          >
+            Cerrar Ventana
+          </button>
+          <button 
+            onClick={() => { onSave(localMachines); onClose(); }} 
+            className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+            Aplicar Cambios
+          </button>
         </div>
       </div>
     </div>
@@ -522,24 +589,32 @@ export default function App() {
     localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
   };
 
-  const handleDeleteBatch = (id: string) => {
+  const handleDeleteBatch = async (id: string) => {
     const updated = batches.filter(b => b.id !== id);
     setBatches(updated);
     localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(updated));
-    handleSync(machines, updated);
+    
+    // Eliminar de la nube de forma asíncrona
+    await deleteBatchFromCloud(id);
+    setStatus("Sincronizado");
+    setTimeout(() => setStatus(""), 2000);
   };
 
-  const handleDeleteRecord = (id: string) => {
+  const handleDeleteRecord = async (id: string) => {
     const updated = records.filter(r => r.id !== id);
     setRecords(updated);
     localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
+
+    // Eliminar de la nube de forma asíncrona
+    await deleteTimeRecordFromCloud(id);
+    setStatus("Sincronizado");
+    setTimeout(() => setStatus(""), 2000);
   };
 
   if (machines.length === 0) return <div className="fixed inset-0 flex items-center justify-center bg-slate-950 text-white font-black animate-pulse uppercase tracking-[1em] text-xs">Metallo</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter'] pb-10">
-      {/* CABECERA PREMIUM MÓVIL */}
       <header className="bg-white px-5 pt-6 pb-6 flex flex-col gap-6 sticky top-0 z-40 shadow-xl shadow-slate-200/40 border-b border-slate-100">
         <div className="flex justify-between items-center">
            <div className="flex items-center gap-4">
@@ -554,21 +629,17 @@ export default function App() {
            </button>
         </div>
         
-        {/* BOTONES DE ACCIÓN PRINCIPALES */}
         <div className="flex gap-3 h-20">
-           {/* BOTÓN CRONÓMETRO (CUADRADO) */}
            <button onClick={() => setIsStopwatchOpen(true)} className="aspect-square h-full bg-orange-500 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-orange-500/30 active:scale-95 transition-all border-b-4 border-orange-600">
              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
              <span className="text-[9px] font-black uppercase mt-1.5 tracking-tighter">Cronógrafo</span>
            </button>
            
-           {/* BOTÓN TIEMPOS TOMADOS (RECTANGULAR AZUL OSCURO) */}
            <button onClick={() => setIsHistoryOpen(true)} className="flex-1 h-full bg-slate-900 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-slate-900/30 active:scale-95 transition-all border-b-4 border-slate-950">
              <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
              <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest text-blue-100">Tiempos Tomados</span>
            </button>
            
-           {/* BOTÓN PROGRAMAR (RECTANGULAR AZUL PROFESIONAL) */}
            <button onClick={() => setIsBatchOpen(true)} className="flex-1 h-full bg-blue-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-blue-700/30 active:scale-95 transition-all border-b-4 border-blue-800">
              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
              <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest">Programar</span>
@@ -577,16 +648,14 @@ export default function App() {
         {status && <div className="text-center text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] animate-pulse">{status}</div>}
       </header>
 
-      {/* DASHBOARD DE MÁQUINAS */}
       <main className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 max-w-[2400px] mx-auto w-full">
          {machines.map(m => (
            <MachineColumn key={m.id} machine={m} batches={batches} onDeleteBatch={handleDeleteBatch} />
          ))}
       </main>
 
-      {/* MODALES */}
       <BatchModal isOpen={isBatchOpen} onClose={() => setIsBatchOpen(false)} machines={machines} onAddBatch={handleAddBatch} />
-      <StopwatchModal isOpen={isStopwatchOpen} onClose={() => setIsStopwatchOpen(false)} machines={machines} onUpdateMachineValue={() => {}} onSaveRecord={handleSaveRecord} />
+      <StopwatchModal isOpen={isStopwatchOpen} onClose={() => setIsStopwatchOpen(false)} machines={machines} onSaveRecord={handleSaveRecord} />
       <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} records={records} machines={machines} onDeleteRecord={handleDeleteRecord} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} machines={machines} onSave={m => { setMachines(m); handleSync(m, batches); }} />
     </div>
