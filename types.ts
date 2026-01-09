@@ -6,6 +6,8 @@ export interface MachineConfig {
   imageUrl?: string;
   strikeTime: number; // minutes
   toolChangeTime: number; // minutes
+  setupTime: number; // minutes (Puesta a punto)
+  measurementTime: number; // minutes (Tiempo de medición por ángulo)
   tramTime: number; // minutes per tram
   craneTurnTime: number; // minutes (bridge crane)
   craneRotateTime: number; // minutes (bridge crane)
@@ -22,13 +24,23 @@ export interface Batch {
   pieces: number;
   strikesPerPiece: number;
   trams: number;
-  turnTime: number; // minutes (override)
-  rotateTime: number; // minutes (override)
+  toolChanges: number; 
+  // Overrides para el lote específico
+  strikeTime?: number;
+  toolChangeTime?: number;
+  tramTime?: number;
+  setupTime?: number;
+  measurementTime?: number;
+  turnTime?: number; // Manual turn override
+  rotateTime?: number; // Manual rotate override
+  craneTurnTime?: number; // Crane turn override
+  craneRotateTime?: number; // Crane rotate override
+  
   useCraneTurn: boolean;
   useCraneRotate: boolean;
   requiresToolChange: boolean;
-  totalTime: number; // calculated minutes
-  scheduledDate: string; // YYYY-MM-DD
+  totalTime: number;
+  scheduledDate: string;
   notes: string;
 }
 
@@ -43,11 +55,6 @@ export interface TimeRecord {
   id: string;
   machineId: string;
   parameter: keyof MachineConfig;
-  value: number; // in minutes (converted from stopwatch seconds)
+  value: number;
   timestamp: string;
-}
-
-export interface AppState {
-  machines: MachineConfig[];
-  batches: Batch[];
 }

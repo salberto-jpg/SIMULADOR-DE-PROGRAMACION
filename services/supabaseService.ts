@@ -32,13 +32,10 @@ const getClient = () => {
 
 const handleError = (error: any, context: string) => {
   if (!error) return;
-  
   const msg = error.message || error.details || (typeof error === 'object' ? JSON.stringify(error) : String(error));
   const code = error.code || "ERR";
-  
   lastError = `[${code}] en ${context}: ${msg}`;
   console.error(`[METALLO NUBE ERROR] ${lastError}`);
-  
   if (msg.includes('Failed to fetch') || code === 'PGRST301' || msg.includes('endpoint')) {
     isCloudAvailable = false;
   }
@@ -63,15 +60,17 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
       name: m.name || m.id,
       description: m.description || '',
       imageUrl: m.image_url || m.imageUrl || '',
-      strikeTime: Number(m.strike_time || m.strikeTime || 0),
-      toolChangeTime: Number(m.tool_change_time || m.toolChangeTime || 0),
-      tramTime: Number(m.tram_time || m.tramTime || 0),
-      craneTurnTime: Number(m.crane_turn_time || m.craneTurnTime || 0),
-      craneRotateTime: Number(m.crane_rotate_time || m.craneRotateTime || 0),
-      manualTurnTime: Number(m.manual_turn_time || m.manualTurnTime || 0.05),
-      manualRotateTime: Number(m.manual_rotate_time || m.manualRotateTime || 0.05),
+      strikeTime: Number(m.strike_time || 0),
+      toolChangeTime: Number(m.tool_change_time || 0),
+      setupTime: Number(m.setup_time || 0),
+      measurementTime: Number(m.measurement_time || 0),
+      tramTime: Number(m.tram_time || 0),
+      craneTurnTime: Number(m.crane_turn_time || 0),
+      craneRotateTime: Number(m.crane_rotate_time || 0),
+      manualTurnTime: Number(m.manual_turn_time || 0.05),
+      manualRotateTime: Number(m.manual_rotate_time || 0.05),
       efficiency: Number(m.efficiency || 0),
-      productiveHours: Number(m.productive_hours || m.productiveHours || 0)
+      productiveHours: Number(m.productive_hours || 0)
     }));
   } catch (e: any) {
     handleError(e, "Excepción fetchMachines");
@@ -91,17 +90,25 @@ export const fetchBatches = async (): Promise<Batch[]> => {
     return (data || []).map((b: any) => ({
       id: b.id,
       name: b.name || b.id,
-      machineId: b.machine_id || b.machineId,
+      machineId: b.machine_id,
       pieces: Number(b.pieces || 0),
-      strikesPerPiece: Number(b.strikes_per_piece || b.strikesPerPiece || 0),
+      strikesPerPiece: Number(b.strikes_per_piece || 0),
       trams: Number(b.trams || 0),
-      turnTime: Number(b.turn_time || b.turnTime || 0),
-      rotateTime: Number(b.rotate_time || b.rotateTime || 0),
-      useCraneTurn: b.use_crane_turn || b.useCraneTurn || false,
-      useCraneRotate: b.use_crane_rotate || b.useCraneRotate || false,
-      requiresToolChange: b.requires_tool_change || b.requiresToolChange || false,
-      totalTime: Number(b.total_time || b.totalTime || 0),
-      scheduledDate: b.scheduled_date || b.scheduledDate || new Date().toISOString().split('T')[0],
+      toolChanges: Number(b.tool_changes || 1),
+      strikeTime: b.strike_time ? Number(b.strike_time) : undefined,
+      toolChangeTime: b.tool_change_time ? Number(b.tool_change_time) : undefined,
+      tramTime: b.tram_time ? Number(b.tram_time) : undefined,
+      turnTime: b.turn_time ? Number(b.turn_time) : undefined,
+      rotateTime: b.rotate_time ? Number(b.rotate_time) : undefined,
+      craneTurnTime: b.crane_turn_time ? Number(b.crane_turn_time) : undefined,
+      craneRotateTime: b.crane_rotate_time ? Number(b.crane_rotate_time) : undefined,
+      setupTime: b.setup_time ? Number(b.setup_time) : undefined,
+      measurementTime: b.measurement_time ? Number(b.measurement_time) : undefined,
+      useCraneTurn: b.use_crane_turn || false,
+      useCraneRotate: b.use_crane_rotate || false,
+      requiresToolChange: b.requires_tool_change || false,
+      totalTime: Number(b.total_time || 0),
+      scheduledDate: b.scheduled_date || new Date().toISOString().split('T')[0],
       notes: b.notes || ''
     }));
   } catch (e: any) {
@@ -135,7 +142,6 @@ export const fetchTimeRecords = async (): Promise<TimeRecord[]> => {
 export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) => {
   const client = getClient();
   if (!client) throw new Error("Cloud no disponible");
-  
   try {
     const machinePayload = machines.map(m => ({
       id: m.id,
@@ -143,18 +149,16 @@ export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) =
       description: m.description,
       strike_time: m.strikeTime,
       tool_change_time: m.toolChangeTime,
+      setup_time: m.setupTime,
+      measurement_time: m.measurementTime,
       tram_time: m.tramTime,
       crane_turn_time: m.craneTurnTime,
       crane_rotate_time: m.craneRotateTime,
       efficiency: m.efficiency,
       productive_hours: m.productiveHours
     }));
-    
     const { error: mError } = await client.from('machines').upsert(machinePayload, { onConflict: 'id' });
-    if (mError) {
-      handleError(mError, "Sync Máquinas");
-      throw mError;
-    }
+    if (mError) throw mError;
 
     if (batches.length > 0) {
       const batchPayload = batches.map(b => ({
@@ -164,23 +168,25 @@ export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) =
         pieces: b.pieces,
         strikes_per_piece: b.strikesPerPiece,
         trams: b.trams,
+        tool_changes: b.toolChanges,
+        strike_time: b.strikeTime,
+        tool_change_time: b.toolChangeTime,
+        tram_time: b.tramTime,
         turn_time: b.turnTime,
         rotate_time: b.rotateTime,
+        crane_turn_time: b.craneTurnTime,
+        crane_rotate_time: b.craneRotateTime,
+        setup_time: b.setupTime,
+        measurement_time: b.measurementTime,
         use_crane_turn: b.useCraneTurn,
         use_crane_rotate: b.useCraneRotate,
-        requires_tool_change: b.requiresToolChange,
         total_time: b.totalTime,
         scheduled_date: b.scheduledDate,
         notes: b.notes
       }));
-      
       const { error: bError } = await client.from('batches').upsert(batchPayload, { onConflict: 'id' });
-      if (bError) {
-        handleError(bError, "Sync Lotes");
-        throw bError;
-      }
+      if (bError) throw bError;
     }
-    
     lastError = null;
     return true;
   } catch (e: any) {
@@ -207,9 +213,6 @@ export const saveTimeStudy = async (record: TimeRecord) => {
   }
 };
 
-/**
- * Elimina un lote de la base de datos de Supabase.
- */
 export const deleteBatchFromCloud = async (id: string) => {
   const client = getClient();
   if (!client) return;
@@ -221,9 +224,6 @@ export const deleteBatchFromCloud = async (id: string) => {
   }
 };
 
-/**
- * Elimina un registro de estudio de tiempo de la base de datos de Supabase.
- */
 export const deleteTimeRecordFromCloud = async (id: string) => {
   const client = getClient();
   if (!client) return;
@@ -234,25 +234,3 @@ export const deleteTimeRecordFromCloud = async (id: string) => {
     handleError(e, "Excepción eliminar registro tiempo");
   }
 };
-
-export const logMachineConfig = async (machine: MachineConfig) => {
-  const client = getClient();
-  if (!client) return false;
-  try {
-    const { error } = await client.from('config_log').insert([{
-      machine_id: machine.id,
-      strike_time: machine.strikeTime,
-      tool_change_time: machine.toolChangeTime,
-      tram_time: machine.tramTime,
-      crane_turn_time: machine.craneTurnTime,
-      crane_rotate_time: machine.craneRotateTime,
-      efficiency: machine.efficiency,
-      productive_hours: machine.productiveHours,
-      timestamp: new Date().toISOString()
-    }]);
-    if (error) handleError(error, "Log Configuración");
-    return !error;
-  } catch (e) {
-    return false;
-  }
-}

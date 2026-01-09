@@ -25,6 +25,8 @@ const LOGO_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co/storage/v1/object/pub
 const PARAM_LABELS: Record<string, string> = {
   strikeTime: "Golpe",
   toolChangeTime: "Cambio Herram.",
+  setupTime: "Puesta a Punto",
+  measurementTime: "Medición",
   tramTime: "Tiempo Tramo",
   craneTurnTime: "Volteo (Grúa)",
   craneRotateTime: "Giro (Grúa)",
@@ -32,7 +34,6 @@ const PARAM_LABELS: Record<string, string> = {
   manualRotateTime: "Giro"
 };
 
-// MODAL DE TIEMPOS TOMADOS (HISTORIAL)
 const HistoryModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -41,16 +42,13 @@ const HistoryModal: React.FC<{
   onDeleteRecord: (id: string) => void;
 }> = ({ isOpen, onClose, records, machines, onDeleteRecord }) => {
   const [selectedParam, setSelectedParam] = useState<string | null>(null);
-
   const groupedByParam = useMemo(() => {
     const groups: Record<string, { label: string, records: TimeRecord[] }> = {};
     Object.entries(PARAM_LABELS).forEach(([key, label]) => {
       groups[key] = { label, records: [] };
     });
     records.forEach(rec => {
-      if (groups[rec.parameter]) {
-        groups[rec.parameter].records.push(rec);
-      }
+      if (groups[rec.parameter]) groups[rec.parameter].records.push(rec);
     });
     return groups;
   }, [records]);
@@ -138,15 +136,12 @@ const HistoryModal: React.FC<{
                                 {rec.value.toFixed(4)} <span className="text-[9px] text-slate-400 uppercase font-bold ml-1">min</span>
                               </div>
                               <div className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-1.5">
-                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" /></svg>
                                 {rec.timestamp}
                               </div>
                             </div>
                           </div>
-                          <button 
-                            onClick={() => onDeleteRecord(rec.id)} 
-                            className="text-slate-200 hover:text-red-500 p-2 sm:p-3 rounded-xl transition-all"
-                          >
+                          <button onClick={() => onDeleteRecord(rec.id)} className="text-slate-200 hover:text-red-500 p-2 sm:p-3 rounded-xl transition-all">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
@@ -163,7 +158,6 @@ const HistoryModal: React.FC<{
   );
 };
 
-// MODAL DE PROGRAMACIÓN
 const BatchModal: React.FC<{ 
   isOpen: boolean;
   onClose: () => void;
@@ -172,9 +166,13 @@ const BatchModal: React.FC<{
 }> = ({ isOpen, onClose, machines, onAddBatch }) => {
   const [formData, setFormData] = useState({
     name: '', machineId: machines[0]?.id || '', pieces: 100, strikesPerPiece: 5, 
-    trams: 1, turnTime: 0.05, rotateTime: 0.05, useCraneTurn: false, 
-    useCraneRotate: false, requiresToolChange: false, notes: '',
-    scheduledDate: new Date().toISOString().split('T')[0]
+    trams: 1, toolChanges: 1, 
+    strikeTime: 0, toolChangeTime: 0, tramTime: 0,
+    turnTime: 0, rotateTime: 0, 
+    craneTurnTime: 0, craneRotateTime: 0,
+    setupTime: 0, measurementTime: 0,
+    useCraneTurn: false, useCraneRotate: false, requiresToolChange: true, 
+    notes: '', scheduledDate: new Date().toISOString().split('T')[0]
   });
 
   useEffect(() => {
@@ -183,8 +181,15 @@ const BatchModal: React.FC<{
       setFormData(prev => ({
         ...prev,
         machineId: selectedMachine.id,
-        turnTime: selectedMachine.manualTurnTime || 0.05,
-        rotateTime: selectedMachine.manualRotateTime || 0.05
+        turnTime: selectedMachine.manualTurnTime || 0,
+        rotateTime: selectedMachine.manualRotateTime || 0,
+        craneTurnTime: selectedMachine.craneTurnTime || 0,
+        craneRotateTime: selectedMachine.craneRotateTime || 0,
+        setupTime: selectedMachine.setupTime || 0,
+        measurementTime: selectedMachine.measurementTime || 0,
+        strikeTime: selectedMachine.strikeTime || 0,
+        toolChangeTime: selectedMachine.toolChangeTime || 0,
+        tramTime: selectedMachine.tramTime || 0
       }));
     }
   }, [formData.machineId, machines, isOpen]);
@@ -193,59 +198,127 @@ const BatchModal: React.FC<{
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden">
-        <div className="p-6 border-b flex justify-between items-center bg-blue-700 text-white">
-          <h3 className="text-xl font-black uppercase tracking-tight">Nueva Programación</h3>
+      <div className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden">
+        <div className="p-6 border-b flex justify-between items-center bg-blue-700 text-white shrink-0">
+          <h3 className="text-xl font-black uppercase tracking-tight">Programación Avanzada</h3>
           <button onClick={onClose} className="text-white text-3xl font-light">&times;</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 bg-white space-y-6">
-          <form onSubmit={(e) => { e.preventDefault(); onAddBatch(formData); onClose(); }} className="space-y-5">
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Trabajo / Pedido</label>
-              <input type="text" className="w-full border-2 border-slate-100 rounded-xl p-3 focus:border-blue-600 outline-none font-bold text-lg" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required placeholder="Ej: Pedido #9921" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Máquina</label>
-                <select className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold bg-slate-50" value={formData.machineId} onChange={e => setFormData({ ...formData, machineId: e.target.value })}>
-                  {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
-                </select>
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-8 scrollbar-hide">
+          <form onSubmit={(e) => { e.preventDefault(); onAddBatch(formData); onClose(); }} className="space-y-8">
+            <section className="space-y-4">
+              <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-2">1. Datos del Trabajo</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nombre del Pedido</label>
+                  <input type="text" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Máquina</label>
+                  <select className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.machineId} onChange={e => setFormData({ ...formData, machineId: e.target.value })}>
+                    {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha Programada</label>
+                  <input type="date" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.scheduledDate} onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })} />
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Fecha</label>
-                <input type="date" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.scheduledDate} onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })} />
+            </section>
+
+            <section className="space-y-4">
+              <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] border-b border-emerald-100 pb-2">2. Cantidades y Estructura</h5>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Piezas</label>
+                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.pieces} onChange={e => setFormData({ ...formData, pieces: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Golpes/Pza</label>
+                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.strikesPerPiece} onChange={e => setFormData({ ...formData, strikesPerPiece: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Herram.</label>
+                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.toolChanges} onChange={e => setFormData({ ...formData, toolChanges: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tramos</label>
+                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.trams} onChange={e => setFormData({ ...formData, trams: parseInt(e.target.value) || 0 })} />
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Piezas</label>
-                <input type="number" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.pieces} onChange={e => setFormData({ ...formData, pieces: parseInt(e.target.value) || 0 })} />
+            </section>
+
+            <section className="space-y-4">
+              <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] border-b border-orange-100 pb-2">3. Configuración de Tiempos (min)</h5>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Puesta Punto (Base)</label>
+                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.setupTime} onChange={e => setFormData({ ...formData, setupTime: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Medición (x Ángulo)</label>
+                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.measurementTime} onChange={e => setFormData({ ...formData, measurementTime: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Golpe</label>
+                  <input type="number" step="0.001" className="w-full font-bold outline-none" value={formData.strikeTime} onChange={e => setFormData({ ...formData, strikeTime: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Cambio</label>
+                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.toolChangeTime} onChange={e => setFormData({ ...formData, toolChangeTime: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Tramo</label>
+                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.tramTime} onChange={e => setFormData({ ...formData, tramTime: parseFloat(e.target.value) || 0 })} />
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Golpes/Pza</label>
-                <input type="number" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.strikesPerPiece} onChange={e => setFormData({ ...formData, strikesPerPiece: parseInt(e.target.value) || 0 })} />
+            </section>
+
+            <section className="space-y-4">
+              <h5 className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">4. Maniobras de Volteo y Giro</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-2xl border transition-all ${!formData.useCraneTurn ? 'bg-white border-blue-100 ring-2 ring-blue-50' : 'bg-slate-50 border-slate-100'}`}>
+                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
+                      <input type="radio" name="turnType" checked={!formData.useCraneTurn} onChange={() => setFormData({...formData, useCraneTurn: false})} />
+                      Volteo Manual (min)
+                    </label>
+                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.turnTime} onChange={e => setFormData({ ...formData, turnTime: parseFloat(e.target.value) || 0 })} disabled={formData.useCraneTurn} />
+                  </div>
+                  <div className={`p-4 rounded-2xl border transition-all ${formData.useCraneTurn ? 'bg-white border-orange-100 ring-2 ring-orange-50' : 'bg-slate-50 border-slate-100'}`}>
+                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
+                      <input type="radio" name="turnType" checked={formData.useCraneTurn} onChange={() => setFormData({...formData, useCraneTurn: true})} />
+                      Volteo Grúa (min)
+                    </label>
+                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.craneTurnTime} onChange={e => setFormData({ ...formData, craneTurnTime: parseFloat(e.target.value) || 0 })} disabled={!formData.useCraneTurn} />
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-2xl border transition-all ${!formData.useCraneRotate ? 'bg-white border-blue-100 ring-2 ring-blue-50' : 'bg-slate-50 border-slate-100'}`}>
+                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
+                      <input type="radio" name="rotateType" checked={!formData.useCraneRotate} onChange={() => setFormData({...formData, useCraneRotate: false})} />
+                      Giro Manual (min)
+                    </label>
+                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} disabled={formData.useCraneRotate} />
+                  </div>
+                  <div className={`p-4 rounded-2xl border transition-all ${formData.useCraneRotate ? 'bg-white border-orange-100 ring-2 ring-orange-50' : 'bg-slate-50 border-slate-100'}`}>
+                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
+                      <input type="radio" name="rotateType" checked={formData.useCraneRotate} onChange={() => setFormData({...formData, useCraneRotate: true})} />
+                      Giro Grúa (min)
+                    </label>
+                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.craneRotateTime} onChange={e => setFormData({ ...formData, craneRotateTime: parseFloat(e.target.value) || 0 })} disabled={!formData.useCraneRotate} />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Tramos</label>
-                <input type="number" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.trams} onChange={e => setFormData({ ...formData, trams: parseInt(e.target.value) || 0 })} />
+            </section>
+
+            <section className="space-y-4">
+              <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">5. Observaciones</h5>
+              <div className="bg-white p-3 rounded-2xl border border-slate-200">
+                <textarea rows={3} className="w-full outline-none font-medium text-xs resize-none" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Instrucciones especiales para el operador..." />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Volteo (min)</label>
-                <input type="number" step="0.01" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.turnTime} onChange={e => setFormData({ ...formData, turnTime: parseFloat(e.target.value) || 0 })} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Giro (min)</label>
-                <input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} />
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-               <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneTurn} onChange={e => setFormData({...formData, useCraneTurn: e.target.checked})} /> Usar Puente Grúa (Volteo)</label>
-               <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneRotate} onChange={e => setFormData({...formData, useCraneRotate: e.target.checked})} /> Usar Puente Grúa (Giro)</label>
-               <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.requiresToolChange} onChange={e => setFormData({...formData, requiresToolChange: e.target.checked})} /> Requiere Cambio de Herramientas</label>
-            </div>
-            <button type="submit" className="w-full bg-blue-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-100 active:scale-95 transition-all">Ejecutar Programación</button>
+            </section>
+
+            <button type="submit" className="w-full bg-blue-700 text-white py-5 rounded-3xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-200 active:scale-95 transition-all sticky bottom-0">Generar Programación en {machines.find(m => m.id === formData.machineId)?.id}</button>
           </form>
         </div>
       </div>
@@ -253,7 +326,6 @@ const BatchModal: React.FC<{
   );
 };
 
-// MODAL DEL CRONÓMETRO
 const StopwatchModal: React.FC<{
   isOpen: boolean; onClose: () => void; machines: MachineConfig[];
   onSaveRecord: (rec: TimeRecord) => void;
@@ -325,7 +397,6 @@ const StopwatchModal: React.FC<{
   );
 };
 
-// COLUMNA DE MÁQUINA
 const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDeleteBatch: (id: string) => void }> = ({ machine, batches, onDeleteBatch }) => {
   const scheduleByDate = useMemo(() => {
     const dates: Record<string, DailySchedule> = {};
@@ -380,7 +451,6 @@ const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDele
   );
 };
 
-// MODAL DE AJUSTES
 const SettingsModal: React.FC<{ 
   isOpen: boolean, 
   onClose: () => void, 
@@ -410,17 +480,12 @@ const SettingsModal: React.FC<{
         <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
           <div className="flex items-center gap-4">
             {editingMachineId && (
-              <button 
-                onClick={() => setEditingMachineId(null)}
-                className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-colors"
-              >
+              <button onClick={() => setEditingMachineId(null)} className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
               </button>
             )}
             <div>
-              <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none">
-                {editingMachineId ? `Config: ${editingMachineId}` : 'Parámetros por Plegadora'}
-              </h3>
+              <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none">{editingMachineId ? `Config: ${editingMachineId}` : 'Parámetros por Plegadora'}</h3>
               {!editingMachineId && <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-2">Seleccione una máquina para editar</p>}
             </div>
           </div>
@@ -430,18 +495,10 @@ const SettingsModal: React.FC<{
           {!editingMachineId ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
               {localMachines.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setEditingMachineId(m.id)}
-                  className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/10 transition-all text-left group active:scale-95"
-                >
+                <button key={m.id} onClick={() => setEditingMachineId(m.id)} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/10 transition-all text-left group active:scale-95">
                   <div className="flex justify-between items-start mb-3">
-                    <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                      {m.id}
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
-                    </div>
+                    <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">{m.id}</div>
+                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg></div>
                   </div>
                   <h4 className="font-black text-slate-900 text-lg uppercase leading-tight mb-1">{m.name}</h4>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{m.description || 'Configuración general'}</p>
@@ -455,36 +512,28 @@ const SettingsModal: React.FC<{
                   <div>
                     <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Información Básica</h5>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nombre Comercial</label>
-                        <input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.name} onChange={e => updateField(currentMachine.id, 'name', e.target.value)} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Descripción Corta</label>
-                        <input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-medium text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.description} onChange={e => updateField(currentMachine.id, 'description', e.target.value)} />
-                      </div>
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nombre Comercial</label><input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.name} onChange={e => updateField(currentMachine.id, 'name', e.target.value)} /></div>
+                      <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Descripción Corta</label><input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-medium text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.description} onChange={e => updateField(currentMachine.id, 'description', e.target.value)} /></div>
                     </div>
                   </div>
                   <div>
-                    <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Capacidad y Eficiencia</h5>
-                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Eficiencia %</label><input type="number" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.efficiency} onChange={e => updateField(currentMachine.id, 'efficiency', parseInt(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.productiveHours} onChange={e => updateField(currentMachine.id, 'productiveHours', parseFloat(e.target.value))} /></div>
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Ciclos de Trabajo (min)</h5>
-                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                    <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Base de Tiempos Globales (min)</h5>
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Puesta a Punto</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.setupTime} onChange={e => updateField(currentMachine.id, 'setupTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Control Medición</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.measurementTime} onChange={e => updateField(currentMachine.id, 'measurementTime', parseFloat(e.target.value))} /></div>
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Veloc. Golpe</label><input type="number" step="0.001" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.strikeTime} onChange={e => updateField(currentMachine.id, 'strikeTime', parseFloat(e.target.value))} /></div>
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Cambio Herram.</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.toolChangeTime} onChange={e => updateField(currentMachine.id, 'toolChangeTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Tiempo x Tramo</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.tramTime} onChange={e => updateField(currentMachine.id, 'tramTime', parseFloat(e.target.value))} /></div>
                     </div>
                   </div>
                   <div>
-                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 border-b pb-2">Maniobras Específicas</h5>
+                    <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Capacidad y Maniobras</h5>
                     <div className="grid grid-cols-2 gap-4">
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Eficiencia %</label><input type="number" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.efficiency} onChange={e => updateField(currentMachine.id, 'efficiency', parseInt(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.productiveHours} onChange={e => updateField(currentMachine.id, 'productiveHours', parseFloat(e.target.value))} /></div>
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualTurnTime} onChange={e => updateField(currentMachine.id, 'manualTurnTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualRotateTime} onChange={e => updateField(currentMachine.id, 'manualRotateTime', parseFloat(e.target.value))} /></div>
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneTurnTime} onChange={e => updateField(currentMachine.id, 'craneTurnTime', parseFloat(e.target.value))} /></div>
+                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualRotateTime} onChange={e => updateField(currentMachine.id, 'manualRotateTime', parseFloat(e.target.value))} /></div>
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneRotateTime} onChange={e => updateField(currentMachine.id, 'craneRotateTime', parseFloat(e.target.value))} /></div>
                     </div>
                   </div>
@@ -495,17 +544,13 @@ const SettingsModal: React.FC<{
         </div>
         <div className="p-6 sm:p-8 border-t bg-white flex justify-between items-center shrink-0">
           <button onClick={onClose} className="px-6 py-4 font-black text-slate-400 uppercase text-[10px] tracking-widest hover:text-slate-600">Cerrar Ventana</button>
-          <button onClick={() => { onSave(localMachines); onClose(); }} className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-            Aplicar Cambios
-          </button>
+          <button onClick={() => { onSave(localMachines); onClose(); }} className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>Aplicar Cambios</button>
         </div>
       </div>
     </div>
   );
 };
 
-// APP PRINCIPAL
 export default function App() {
   const [machines, setMachines] = useState<MachineConfig[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -534,8 +579,7 @@ export default function App() {
   const handleSync = useCallback(async (m: MachineConfig[], b: Batch[]) => {
     const cloud = checkCloudStatus();
     if (!cloud.available) return;
-    try { await syncAppData(m, b); setStatus("Sincronizado"); } 
-    catch (e) { setStatus("Error Nube"); }
+    try { await syncAppData(m, b); setStatus("Sincronizado"); } catch (e) { setStatus("Error Nube"); }
     setTimeout(() => setStatus(""), 3000);
   }, []);
 
@@ -574,14 +618,7 @@ export default function App() {
     setTimeout(() => setStatus(""), 2000);
   };
 
-  if (machines.length === 0) return (
-    <div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black uppercase tracking-[0.2em] text-xs">Cargando Metallo...</p>
-      </div>
-    </div>
-  );
+  if (machines.length === 0) return <div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white"><div className="text-center"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="font-black uppercase tracking-[0.2em] text-xs">Cargando Metallo...</p></div></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter'] pb-10">
@@ -589,28 +626,14 @@ export default function App() {
         <div className="flex justify-between items-center">
            <div className="flex items-center gap-4">
               <img src={LOGO_URL} alt="METALLO" className="h-16 w-auto object-contain" />
-              <div className="flex flex-col">
-                <span className="text-slate-900 font-black text-lg leading-none uppercase tracking-wider">Simulador de Programación</span>
-                <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Control de Producción Metallo</span>
-              </div>
+              <div className="flex flex-col"><span className="text-slate-900 font-black text-lg leading-none uppercase tracking-wider">Simulador de Programación</span><span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Control de Producción Metallo</span></div>
            </div>
-           <button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-2xl text-slate-400 shadow-inner border border-slate-100 active:scale-90 transition-all">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-           </button>
+           <button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-2xl text-slate-400 shadow-inner border border-slate-100 active:scale-90 transition-all"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
         </div>
         <div className="flex gap-3 h-20">
-           <button onClick={() => setIsStopwatchOpen(true)} className="aspect-square h-full bg-orange-500 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-orange-500/30 active:scale-95 transition-all border-b-4 border-orange-600">
-             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-             <span className="text-[9px] font-black uppercase mt-1.5 tracking-tighter">Cronógrafo</span>
-           </button>
-           <button onClick={() => setIsHistoryOpen(true)} className="flex-1 h-full bg-slate-900 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-slate-900/30 active:scale-95 transition-all border-b-4 border-slate-950">
-             <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-             <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest text-blue-100">Tiempos Tomados</span>
-           </button>
-           <button onClick={() => setIsBatchOpen(true)} className="flex-1 h-full bg-blue-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-blue-700/30 active:scale-95 transition-all border-b-4 border-blue-800">
-             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-             <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest">Programar</span>
-           </button>
+           <button onClick={() => setIsStopwatchOpen(true)} className="aspect-square h-full bg-orange-500 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-orange-500/30 active:scale-95 transition-all border-b-4 border-orange-600"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span className="text-[9px] font-black uppercase mt-1.5 tracking-tighter">Cronógrafo</span></button>
+           <button onClick={() => setIsHistoryOpen(true)} className="flex-1 h-full bg-slate-900 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-slate-900/30 active:scale-95 transition-all border-b-4 border-slate-950"><svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg><span className="text-[10px] font-black uppercase mt-1.5 tracking-widest text-blue-100">Tiempos Tomados</span></button>
+           <button onClick={() => setIsBatchOpen(true)} className="flex-1 h-full bg-blue-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-blue-700/30 active:scale-95 transition-all border-b-4 border-blue-800"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg><span className="text-[10px] font-black uppercase mt-1.5 tracking-widest">Programar</span></button>
         </div>
         {status && <div className="text-center text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] animate-pulse">{status}</div>}
       </header>
