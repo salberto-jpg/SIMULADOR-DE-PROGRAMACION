@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { INITIAL_MACHINES, STORAGE_KEYS } from './constants';
-import { MachineConfig, Batch, DailySchedule, TimeRecord } from './types';
+import { INITIAL_MACHINES, STORAGE_KEYS } from './constants.ts';
+import { MachineConfig, Batch, DailySchedule, TimeRecord } from './types.ts';
 import { 
   calculateBatchTime, 
   formatTime 
-} from './utils/helpers';
+} from './utils/helpers.ts';
 import { 
   initSupabase, 
   fetchMachines, 
@@ -17,7 +17,7 @@ import {
   fetchTimeRecords,
   deleteBatchFromCloud,
   deleteTimeRecordFromCloud
-} from './services/supabaseService';
+} from './services/supabaseService.ts';
 
 const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
 const SUPABASE_KEY = "sb_publishable_w5tryB0lyl0hCNP3B9AAUg_udm3kUu0"; 
@@ -61,8 +61,6 @@ const HistoryModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/90 backdrop-blur-md">
       <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[90vh] overflow-hidden border border-slate-200 animate-in slide-in-from-bottom duration-300">
-        
-        {/* Header Dinámico */}
         <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
           <div>
             <h3 className="text-xl sm:text-2xl font-black tracking-tight uppercase leading-none">Historial de Tiempos</h3>
@@ -70,7 +68,6 @@ const HistoryModal: React.FC<{
           </div>
           <button onClick={onClose} className="text-white hover:text-slate-300 text-4xl font-light p-2">&times;</button>
         </div>
-        
         <div className="flex-1 overflow-hidden flex flex-col sm:flex-row bg-slate-50">
           <div className="w-full sm:w-64 border-b sm:border-r border-slate-200 shrink-0 bg-white">
             <div className="flex sm:flex-col overflow-x-auto sm:overflow-y-auto p-4 sm:p-6 gap-3 scrollbar-hide">
@@ -93,7 +90,6 @@ const HistoryModal: React.FC<{
               ))}
             </div>
           </div>
-
           <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-8 scrollbar-hide">
             {!selectedParam ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
@@ -121,7 +117,6 @@ const HistoryModal: React.FC<{
                     ))}
                   </div>
                 </section>
-
                 <section>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
@@ -210,7 +205,6 @@ const BatchModal: React.FC<{
               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Trabajo / Pedido</label>
               <input type="text" className="w-full border-2 border-slate-100 rounded-xl p-3 focus:border-blue-600 outline-none font-bold text-lg" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required placeholder="Ej: Pedido #9921" />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Máquina</label>
@@ -223,7 +217,6 @@ const BatchModal: React.FC<{
                 <input type="date" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.scheduledDate} onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })} />
               </div>
             </div>
-
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Piezas</label>
@@ -238,7 +231,6 @@ const BatchModal: React.FC<{
                 <input type="number" className="w-full border-2 border-slate-100 rounded-xl p-3 font-bold" value={formData.trams} onChange={e => setFormData({ ...formData, trams: parseInt(e.target.value) || 0 })} />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Volteo (min)</label>
@@ -249,13 +241,11 @@ const BatchModal: React.FC<{
                 <input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} />
               </div>
             </div>
-
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneTurn} onChange={e => setFormData({...formData, useCraneTurn: e.target.checked})} /> Usar Puente Grúa (Volteo)</label>
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.useCraneRotate} onChange={e => setFormData({...formData, useCraneRotate: e.target.checked})} /> Usar Puente Grúa (Giro)</label>
                <label className="flex items-center gap-3 font-bold text-sm text-slate-600 cursor-pointer"><input type="checkbox" className="w-5 h-5 rounded" checked={formData.requiresToolChange} onChange={e => setFormData({...formData, requiresToolChange: e.target.checked})} /> Requiere Cambio de Herramientas</label>
             </div>
-
             <button type="submit" className="w-full bg-blue-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-100 active:scale-95 transition-all">Ejecutar Programación</button>
           </form>
         </div>
@@ -391,7 +381,7 @@ const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDele
   );
 };
 
-// MODAL DE AJUSTES: CON SELECTOR DE BOTONES PREMIUM
+// MODAL DE AJUSTES
 const SettingsModal: React.FC<{ 
   isOpen: boolean, 
   onClose: () => void, 
@@ -418,8 +408,6 @@ const SettingsModal: React.FC<{
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-md p-0 sm:p-4">
       <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-        
-        {/* Header Dinámico */}
         <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
           <div className="flex items-center gap-4">
             {editingMachineId && (
@@ -439,10 +427,8 @@ const SettingsModal: React.FC<{
           </div>
           <button onClick={onClose} className="text-white text-4xl font-light p-2">&times;</button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50 scrollbar-hide">
           {!editingMachineId ? (
-            /* VISTA 1: Selector de Máquinas (Botones Grandes) */
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
               {localMachines.map(m => (
                 <button
@@ -464,12 +450,9 @@ const SettingsModal: React.FC<{
               ))}
             </div>
           ) : (
-            /* VISTA 2: Editor de Máquina Individual */
             <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
               {currentMachine && (
                 <div className="bg-white p-6 sm:p-10 rounded-[40px] border border-slate-200 shadow-sm space-y-10">
-                  
-                  {/* Sección 1: Identificación */}
                   <div>
                     <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Información Básica</h5>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -483,8 +466,6 @@ const SettingsModal: React.FC<{
                       </div>
                     </div>
                   </div>
-
-                  {/* Sección 2: Productividad */}
                   <div>
                     <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Capacidad y Eficiencia</h5>
                     <div className="grid grid-cols-2 gap-4 sm:gap-6">
@@ -492,8 +473,6 @@ const SettingsModal: React.FC<{
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.productiveHours} onChange={e => updateField(currentMachine.id, 'productiveHours', parseFloat(e.target.value))} /></div>
                     </div>
                   </div>
-
-                  {/* Sección 3: Tiempos Base */}
                   <div>
                     <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Ciclos de Trabajo (min)</h5>
                     <div className="grid grid-cols-2 gap-4 sm:gap-6">
@@ -501,8 +480,6 @@ const SettingsModal: React.FC<{
                       <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Cambio Herram.</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.toolChangeTime} onChange={e => updateField(currentMachine.id, 'toolChangeTime', parseFloat(e.target.value))} /></div>
                     </div>
                   </div>
-
-                  {/* Sección 4: Maniobras */}
                   <div>
                     <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 border-b pb-2">Maniobras Específicas</h5>
                     <div className="grid grid-cols-2 gap-4">
@@ -517,18 +494,9 @@ const SettingsModal: React.FC<{
             </div>
           )}
         </div>
-
         <div className="p-6 sm:p-8 border-t bg-white flex justify-between items-center shrink-0">
-          <button 
-            onClick={onClose} 
-            className="px-6 py-4 font-black text-slate-400 uppercase text-[10px] tracking-widest hover:text-slate-600"
-          >
-            Cerrar Ventana
-          </button>
-          <button 
-            onClick={() => { onSave(localMachines); onClose(); }} 
-            className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3"
-          >
+          <button onClick={onClose} className="px-6 py-4 font-black text-slate-400 uppercase text-[10px] tracking-widest hover:text-slate-600">Cerrar Ventana</button>
+          <button onClick={() => { onSave(localMachines); onClose(); }} className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
             Aplicar Cambios
           </button>
@@ -593,8 +561,6 @@ export default function App() {
     const updated = batches.filter(b => b.id !== id);
     setBatches(updated);
     localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(updated));
-    
-    // Eliminar de la nube de forma asíncrona
     await deleteBatchFromCloud(id);
     setStatus("Sincronizado");
     setTimeout(() => setStatus(""), 2000);
@@ -604,8 +570,6 @@ export default function App() {
     const updated = records.filter(r => r.id !== id);
     setRecords(updated);
     localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
-
-    // Eliminar de la nube de forma asíncrona
     await deleteTimeRecordFromCloud(id);
     setStatus("Sincronizado");
     setTimeout(() => setStatus(""), 2000);
@@ -628,18 +592,15 @@ export default function App() {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
            </button>
         </div>
-        
         <div className="flex gap-3 h-20">
            <button onClick={() => setIsStopwatchOpen(true)} className="aspect-square h-full bg-orange-500 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-orange-500/30 active:scale-95 transition-all border-b-4 border-orange-600">
              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
              <span className="text-[9px] font-black uppercase mt-1.5 tracking-tighter">Cronógrafo</span>
            </button>
-           
            <button onClick={() => setIsHistoryOpen(true)} className="flex-1 h-full bg-slate-900 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-slate-900/30 active:scale-95 transition-all border-b-4 border-slate-950">
              <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
              <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest text-blue-100">Tiempos Tomados</span>
            </button>
-           
            <button onClick={() => setIsBatchOpen(true)} className="flex-1 h-full bg-blue-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-blue-700/30 active:scale-95 transition-all border-b-4 border-blue-800">
              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
              <span className="text-[10px] font-black uppercase mt-1.5 tracking-widest">Programar</span>
@@ -647,13 +608,11 @@ export default function App() {
         </div>
         {status && <div className="text-center text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] animate-pulse">{status}</div>}
       </header>
-
       <main className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 max-w-[2400px] mx-auto w-full">
          {machines.map(m => (
            <MachineColumn key={m.id} machine={m} batches={batches} onDeleteBatch={handleDeleteBatch} />
          ))}
       </main>
-
       <BatchModal isOpen={isBatchOpen} onClose={() => setIsBatchOpen(false)} machines={machines} onAddBatch={handleAddBatch} />
       <StopwatchModal isOpen={isStopwatchOpen} onClose={() => setIsStopwatchOpen(false)} machines={machines} onSaveRecord={handleSaveRecord} />
       <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} records={records} machines={machines} onDeleteRecord={handleDeleteRecord} />
