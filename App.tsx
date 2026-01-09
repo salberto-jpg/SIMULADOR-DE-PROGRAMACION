@@ -1,23 +1,22 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { INITIAL_MACHINES, STORAGE_KEYS } from './constants.ts';
-import { MachineConfig, Batch, DailySchedule, TimeRecord } from './types.ts';
+import { INITIAL_MACHINES, STORAGE_KEYS } from './constants';
+import { MachineConfig, Batch, DailySchedule, TimeRecord } from './types';
 import { 
   calculateBatchTime, 
   formatTime 
-} from './utils/helpers.ts';
+} from './utils/helpers';
 import { 
   initSupabase, 
   fetchMachines, 
   fetchBatches, 
   syncAppData, 
-  logMachineConfig, 
   saveTimeStudy,
   checkCloudStatus,
   fetchTimeRecords,
   deleteBatchFromCloud,
   deleteTimeRecordFromCloud
-} from './services/supabaseService.ts';
+} from './services/supabaseService';
 
 const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
 const SUPABASE_KEY = "sb_publishable_w5tryB0lyl0hCNP3B9AAUg_udm3kUu0"; 
@@ -575,7 +574,14 @@ export default function App() {
     setTimeout(() => setStatus(""), 2000);
   };
 
-  if (machines.length === 0) return <div className="fixed inset-0 flex items-center justify-center bg-slate-950 text-white font-black animate-pulse uppercase tracking-[1em] text-xs">Metallo</div>;
+  if (machines.length === 0) return (
+    <div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="font-black uppercase tracking-[0.2em] text-xs">Cargando Metallo...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter'] pb-10">
