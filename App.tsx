@@ -31,27 +31,29 @@ const PARAM_LABELS: Record<string, string> = {
   manualRotateTime: "Giro"
 };
 
-// MODAL DE TIEMPOS TOMADOS
+// MODAL DE TIEMPOS TOMADOS (HISTORIAL)
 const HistoryModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   records: TimeRecord[];
+  machines: MachineConfig[];
   onDeleteRecord: (id: string) => void;
-}> = ({ isOpen, onClose, records, onDeleteRecord }) => {
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+}> = ({ isOpen, onClose, records, machines, onDeleteRecord }) => {
+  const [selectedParam, setSelectedParam] = useState<string | null>(null);
 
-  const groupedRecords = useMemo(() => {
-    const groups: Record<string, { label: string, machineId: string, records: TimeRecord[] }> = {};
+  // Agrupamos registros por parámetro (la descripción del desplegable)
+  const groupedByParam = useMemo(() => {
+    const groups: Record<string, { label: string, records: TimeRecord[] }> = {};
+    
+    // Inicializar grupos basados en PARAM_LABELS para que siempre aparezcan
+    Object.entries(PARAM_LABELS).forEach(([key, label]) => {
+      groups[key] = { label, records: [] };
+    });
+
     records.forEach(rec => {
-      const groupKey = `${rec.machineId}-${rec.parameter}`;
-      if (!groups[groupKey]) {
-        groups[groupKey] = {
-          label: PARAM_LABELS[rec.parameter] || rec.parameter,
-          machineId: rec.machineId,
-          records: []
-        };
+      if (groups[rec.parameter]) {
+        groups[rec.parameter].records.push(rec);
       }
-      groups[groupKey].records.push(rec);
     });
     return groups;
   }, [records]);
@@ -60,66 +62,108 @@ const HistoryModal: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh] overflow-hidden">
-        <div className="p-6 border-b flex justify-between items-center bg-slate-900 text-white">
+      <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+        <div className="p-8 border-b flex justify-between items-center bg-slate-900 text-white">
           <div>
-            <h3 className="text-xl font-black tracking-tight">Tiempos Tomados</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Historial de registros sincronizados</p>
+            <h3 className="text-2xl font-black tracking-tight uppercase">Historial de Tiempos</h3>
+            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.3em] mt-1">Registros de campo vs Configuración</p>
           </div>
-          <button onClick={onClose} className="text-white hover:text-slate-300 text-3xl font-light">&times;</button>
+          <button onClick={onClose} className="text-white hover:text-slate-300 text-4xl font-light transition-transform hover:rotate-90">&times;</button>
         </div>
         
         <div className="flex-1 overflow-hidden flex bg-slate-50">
-          {/* Listado de Grupos */}
-          <div className="w-1/3 border-r border-slate-200 overflow-y-auto p-4 space-y-2 bg-white">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Parámetros</h4>
-            {Object.keys(groupedRecords).length === 0 ? (
-              <div className="text-[10px] text-slate-300 italic">Sin datos</div>
-            ) : (
-              Object.entries(groupedRecords).map(([key, group]: [string, any]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedGroup(key)}
-                  className={`w-full text-left p-3 rounded-xl transition-all border ${
-                    selectedGroup === key 
-                    ? 'bg-blue-600 text-white border-blue-700 shadow-md' 
-                    : 'bg-slate-50 text-slate-600 border-transparent hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="text-[9px] font-black uppercase tracking-tighter opacity-70">{group.machineId}</div>
-                  <div className="text-xs font-bold truncate">{group.label}</div>
-                  <div className={`text-[8px] font-black mt-1 ${selectedGroup === key ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {group.records.length} CAPTURAS
-                  </div>
-                </button>
-              ))
-            )}
+          {/* Menú Lateral: Parámetros */}
+          <div className="w-64 border-r border-slate-200 overflow-y-auto p-6 space-y-3 bg-white">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Seleccionar Tipo</h4>
+            {Object.entries(groupedByParam).map(([key, group]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedParam(key)}
+                className={`w-full text-left p-4 rounded-2xl transition-all border ${
+                  selectedParam === key 
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-lg shadow-blue-600/20 translate-x-1' 
+                  : 'bg-slate-50 text-slate-600 border-transparent hover:bg-slate-100'
+                }`}
+              >
+                <div className="text-xs font-black uppercase tracking-tight">{group.label}</div>
+                <div className={`text-[9px] font-bold mt-1 ${selectedParam === key ? 'text-blue-200' : 'text-slate-400'}`}>
+                  {group.records.length} REGISTROS
+                </div>
+              </button>
+            ))}
           </div>
 
-          {/* Listado de Capturas */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {!selectedGroup ? (
+          {/* Panel Principal: Detalle */}
+          <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-slate-50 scrollbar-hide">
+            {!selectedParam ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-300">
-                <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <p className="text-xs font-bold uppercase tracking-widest">Selecciona un parámetro</p>
+                <div className="w-20 h-20 mb-6 bg-slate-100 rounded-full flex items-center justify-center">
+                  <svg className="w-10 h-10 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <p className="text-xs font-black uppercase tracking-[0.2em]">Selecciona un parámetro para analizar</p>
               </div>
             ) : (
-              groupedRecords[selectedGroup].records.map(rec => (
-                <div key={rec.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center group animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div>
-                    <div className="text-2xl font-mono font-black text-slate-800 tabular-nums">
-                      {rec.value.toFixed(4)} <span className="text-[10px] text-slate-400 uppercase ml-1">min</span>
-                    </div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-2">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      {rec.timestamp}
-                    </div>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* 1. Datos de Configuración por Plegadora */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Configuración Actual en Plegadoras</h5>
                   </div>
-                  <button onClick={() => onDeleteRecord(rec.id)} className="text-slate-200 hover:text-red-500 p-2 transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {machines.map(m => (
+                      <div key={m.id} className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{m.id}</div>
+                        <div className="text-xl font-mono font-black text-slate-800 mt-1">
+                          {(m[selectedParam as keyof MachineConfig] as number)?.toFixed(4)}
+                          <span className="text-[10px] text-slate-400 ml-1">min</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))
+
+                {/* 2. Listado de Tiempos Relevados */}
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-1.5 h-6 bg-orange-500 rounded-full"></div>
+                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Capturas de Campo (Cronómetro)</h5>
+                  </div>
+                  {groupedByParam[selectedParam].records.length === 0 ? (
+                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-[32px] p-12 text-center text-slate-300 text-xs font-bold uppercase tracking-widest">
+                      Sin relevamientos para este parámetro
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groupedByParam[selectedParam].records.map(rec => (
+                        <div key={rec.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-center group hover:border-blue-200 transition-colors">
+                          <div className="flex items-center gap-6">
+                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center font-black text-slate-400 text-xs border border-slate-100">
+                              {rec.machineId}
+                            </div>
+                            <div>
+                              <div className="text-2xl font-mono font-black text-slate-800 tabular-nums">
+                                {rec.value.toFixed(4)} <span className="text-[10px] text-slate-400 uppercase ml-1">min</span>
+                              </div>
+                              <div className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-2">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                {rec.timestamp}
+                              </div>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => onDeleteRecord(rec.id)} 
+                            className="text-slate-200 hover:text-red-500 p-3 rounded-xl hover:bg-red-50 transition-all"
+                            title="Eliminar registro"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -543,7 +587,7 @@ export default function App() {
       {/* MODALES */}
       <BatchModal isOpen={isBatchOpen} onClose={() => setIsBatchOpen(false)} machines={machines} onAddBatch={handleAddBatch} />
       <StopwatchModal isOpen={isStopwatchOpen} onClose={() => setIsStopwatchOpen(false)} machines={machines} onUpdateMachineValue={() => {}} onSaveRecord={handleSaveRecord} />
-      <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} records={records} onDeleteRecord={handleDeleteRecord} />
+      <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} records={records} machines={machines} onDeleteRecord={handleDeleteRecord} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} machines={machines} onSave={m => { setMachines(m); handleSync(m, batches); }} />
     </div>
   );
