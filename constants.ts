@@ -16,7 +16,11 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualTurnTime: 0.05,
     manualRotateTime: 0.05,
     efficiency: 100,
-    productiveHours: 16
+    productiveHours: 16,
+    // Fix: Added missing required properties based on model name
+    maxLength: 2500,
+    maxTons: 60,
+    compatibleToolIds: []
   },
   {
     id: "PL-02",
@@ -32,7 +36,11 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualTurnTime: 0.08,
     manualRotateTime: 0.08,
     efficiency: 100,
-    productiveHours: 16
+    productiveHours: 16,
+    // Fix: Added missing required properties based on model name
+    maxLength: 3000,
+    maxTons: 150,
+    compatibleToolIds: []
   },
   {
     id: "PL-03",
@@ -48,7 +56,11 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualTurnTime: 0.12,
     manualRotateTime: 0.12,
     efficiency: 100,
-    productiveHours: 16
+    productiveHours: 16,
+    // Fix: Added missing required properties based on model name
+    maxLength: 4000,
+    maxTons: 220,
+    compatibleToolIds: []
   }
 ];
 

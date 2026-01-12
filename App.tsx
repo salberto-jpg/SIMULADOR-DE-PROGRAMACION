@@ -1,651 +1,529 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { INITIAL_MACHINES, STORAGE_KEYS } from './constants';
-import { MachineConfig, Batch, DailySchedule, TimeRecord } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import { INITIAL_MACHINES } from './constants';
+import { MachineConfig, Batch, Tool, Thickness, TimeRecord } from './types';
+import { calculateBatchTime, formatTime } from './utils/helpers';
+import { optimizeProductionSchedule } from './services/geminiService';
 import { 
-  calculateBatchTime, 
-  formatTime 
-} from './utils/helpers';
-import { 
-  initSupabase, 
-  fetchMachines, 
-  fetchBatches, 
-  syncAppData, 
-  saveTimeStudy,
-  checkCloudStatus,
-  fetchTimeRecords,
-  deleteBatchFromCloud,
-  deleteTimeRecordFromCloud
+  initSupabase, fetchMachines, fetchBatches, fetchTools, fetchThicknesses,
+  saveTool, deleteTool, saveThickness, deleteThickness, syncAppData, deleteBatchFromCloud,
+  subscribeToChanges, saveTimeRecord
 } from './services/supabaseService';
 
-const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
-const SUPABASE_KEY = "sb_publishable_w5tryB0lyl0hCNP3B9AAUg_udm3kUu0"; 
 const LOGO_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co/storage/v1/object/public/IMAGENES/metallo-removebg-preview.png";
 
-const PARAM_LABELS: Record<string, string> = {
-  strikeTime: "Golpe",
-  toolChangeTime: "Cambio Herram.",
-  setupTime: "Puesta a Punto",
-  measurementTime: "Medición",
-  tramTime: "Tiempo Tramo",
-  craneTurnTime: "Volteo (Grúa)",
-  craneRotateTime: "Giro (Grúa)",
-  manualTurnTime: "Volteo",
-  manualRotateTime: "Giro"
-};
+type TabType = 'schedule' | 'machines' | 'tools' | 'thickness' | 'import';
 
-const HistoryModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  records: TimeRecord[];
-  machines: MachineConfig[];
-  onDeleteRecord: (id: string) => void;
-}> = ({ isOpen, onClose, records, machines, onDeleteRecord }) => {
-  const [selectedParam, setSelectedParam] = useState<string | null>(null);
-  const groupedByParam = useMemo(() => {
-    const groups: Record<string, { label: string, records: TimeRecord[] }> = {};
-    Object.entries(PARAM_LABELS).forEach(([key, label]) => {
-      groups[key] = { label, records: [] };
-    });
-    records.forEach(rec => {
-      if (groups[rec.parameter]) groups[rec.parameter].records.push(rec);
-    });
-    return groups;
-  }, [records]);
+export default function App() {
+  const [activeTab, setActiveTab] = useState<TabType>('schedule');
+  const [machines, setMachines] = useState<MachineConfig[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [thicknesses, setThicknesses] = useState<Thickness[]>([]);
+  const [status, setStatus] = useState("");
+  const [isEditing, setIsEditing] = useState<{ type: string, data: any } | null>(null);
+  const [iaWarnings, setIaWarnings] = useState<{batch_id: string, reason: string}[] | null>(null);
 
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-950/90 backdrop-blur-md">
-      <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[90vh] overflow-hidden border border-slate-200 animate-in slide-in-from-bottom duration-300">
-        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
-          <div>
-            <h3 className="text-xl sm:text-2xl font-black tracking-tight uppercase leading-none">Historial de Tiempos</h3>
-            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.3em] mt-2">Relevamientos vs Teoría</p>
-          </div>
-          <button onClick={onClose} className="text-white hover:text-slate-300 text-4xl font-light p-2">&times;</button>
-        </div>
-        <div className="flex-1 overflow-hidden flex flex-col sm:flex-row bg-slate-50">
-          <div className="w-full sm:w-64 border-b sm:border-r border-slate-200 shrink-0 bg-white">
-            <div className="flex sm:flex-col overflow-x-auto sm:overflow-y-auto p-4 sm:p-6 gap-3 scrollbar-hide">
-              <h4 className="hidden sm:block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Tipo de Parámetro</h4>
-              {(Object.entries(groupedByParam) as [string, { label: string, records: TimeRecord[] }][]).map(([key, group]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedParam(key)}
-                  className={`whitespace-nowrap sm:whitespace-normal text-left px-5 py-4 sm:p-4 rounded-2xl transition-all border shrink-0 sm:shrink ${
-                    selectedParam === key 
-                    ? 'bg-blue-600 text-white border-blue-700 shadow-lg shadow-blue-600/20' 
-                    : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="text-[11px] sm:text-xs font-black uppercase tracking-tight">{group.label}</div>
-                  <div className={`text-[9px] font-bold mt-0.5 ${selectedParam === key ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {group.records.length} REG.
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-8 scrollbar-hide">
-            {!selectedParam ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
-                <div className="w-16 h-16 mb-6 bg-slate-100 rounded-full flex items-center justify-center">
-                  <svg className="w-8 h-8 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Elige un parámetro para ver detalle</p>
-              </div>
-            ) : (
-              <div className="animate-in fade-in slide-in-from-bottom-2 duration-400">
-                <section className="mb-10">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
-                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em]">Configuración Actual</h5>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 sm:gap-4">
-                    {machines.map(m => (
-                      <div key={m.id} className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm text-center sm:text-left">
-                        <div className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.id}</div>
-                        <div className="text-sm sm:text-xl font-mono font-black text-slate-800 mt-1 truncate">
-                          {(m[selectedParam as keyof MachineConfig] as number)?.toFixed(4)}
-                        </div>
-                        <div className="text-[8px] text-slate-400 font-bold uppercase mt-1">minutos</div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-                <section>
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1 h-4 bg-orange-500 rounded-full"></div>
-                    <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.15em]">Registros en Planta</h5>
-                  </div>
-                  {groupedByParam[selectedParam].records.length === 0 ? (
-                    <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-10 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest">
-                      Sin datos relevados aún
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {groupedByParam[selectedParam].records.map(rec => (
-                        <div key={rec.id} className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm flex justify-between items-center hover:border-blue-100 transition-all">
-                          <div className="flex items-center gap-4 sm:gap-6">
-                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center font-black text-slate-400 text-[9px] border border-slate-100">
-                              {rec.machineId}
-                            </div>
-                            <div>
-                              <div className="text-xl sm:text-2xl font-mono font-black text-slate-800 tabular-nums">
-                                {rec.value.toFixed(4)} <span className="text-[9px] text-slate-400 uppercase font-bold ml-1">min</span>
-                              </div>
-                              <div className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest flex items-center gap-1.5">
-                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" /></svg>
-                                {rec.timestamp}
-                              </div>
-                            </div>
-                          </div>
-                          <button onClick={() => onDeleteRecord(rec.id)} className="text-slate-200 hover:text-red-500 p-2 sm:p-3 rounded-xl transition-all">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const BatchModal: React.FC<{ 
-  isOpen: boolean;
-  onClose: () => void;
-  machines: MachineConfig[], 
-  onAddBatch: (batch: any) => void
-}> = ({ isOpen, onClose, machines, onAddBatch }) => {
-  const [formData, setFormData] = useState({
-    name: '', machineId: machines[0]?.id || '', pieces: 100, strikesPerPiece: 5, 
-    trams: 1, toolChanges: 1, 
-    strikeTime: 0, toolChangeTime: 0, tramTime: 0,
-    turnTime: 0, rotateTime: 0, 
-    craneTurnTime: 0, craneRotateTime: 0,
-    setupTime: 0, measurementTime: 0,
-    useCraneTurn: false, useCraneRotate: false, requiresToolChange: true, 
-    notes: '', scheduledDate: new Date().toISOString().split('T')[0]
-  });
-
+  // Inicialización y Realtime
   useEffect(() => {
-    if (isOpen && machines.length > 0) {
-      const selectedMachine = machines.find(m => m.id === formData.machineId) || machines[0];
-      setFormData(prev => ({
-        ...prev,
-        machineId: selectedMachine.id,
-        turnTime: selectedMachine.manualTurnTime || 0,
-        rotateTime: selectedMachine.manualRotateTime || 0,
-        craneTurnTime: selectedMachine.craneTurnTime || 0,
-        craneRotateTime: selectedMachine.craneRotateTime || 0,
-        setupTime: selectedMachine.setupTime || 0,
-        measurementTime: selectedMachine.measurementTime || 0,
-        strikeTime: selectedMachine.strikeTime || 0,
-        toolChangeTime: selectedMachine.toolChangeTime || 0,
-        tramTime: selectedMachine.tramTime || 0
-      }));
+    const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
+    const SUPABASE_KEY = "sb_publishable_w5tryB0lyl0hCNP3B9AAUg_udm3kUu0"; 
+    initSupabase(SUPABASE_URL, SUPABASE_KEY);
+    loadData();
+
+    // Suscripciones Realtime para actualización instantánea
+    const subBatches = subscribeToChanges('batches', () => loadData());
+    const subTools = subscribeToChanges('tools', () => loadData());
+    const subMachines = subscribeToChanges('machines', () => loadData());
+    const subThickness = subscribeToChanges('thicknesses', () => loadData());
+
+    return () => {
+      subBatches?.unsubscribe();
+      subTools?.unsubscribe();
+      subMachines?.unsubscribe();
+      subThickness?.unsubscribe();
+    };
+  }, []);
+
+  const loadData = async () => {
+    const [m, b, t, th] = await Promise.all([
+      fetchMachines(), fetchBatches(), fetchTools(), fetchThicknesses()
+    ]);
+    setMachines(m.length ? m : INITIAL_MACHINES);
+    setBatches(b);
+    setTools(t);
+    setThicknesses(th);
+  };
+
+  const handleSync = async () => {
+    setStatus("Sincronizando...");
+    await syncAppData(machines, batches);
+    setStatus("Sincronizado");
+    setTimeout(() => setStatus(""), 2000);
+  };
+
+  const runIA = async () => {
+    setStatus("IA Analizando...");
+    const result = await optimizeProductionSchedule(batches, machines, tools, thicknesses);
+    if (result) {
+      if (result.unschedulable) setIaWarnings(result.unschedulable);
+      const updated = batches.map(b => {
+        const suggestion = result.plan?.find((p: any) => p.batch_id === b.id);
+        if (suggestion) return { ...b, machineId: suggestion.machine_id, scheduledDate: suggestion.scheduled_date };
+        return b;
+      });
+      setBatches(updated);
+      await syncAppData(machines, updated);
+      setStatus("Optimizado con IA");
     }
-  }, [formData.machineId, machines, isOpen]);
+  };
 
-  if (!isOpen) return null;
+  const handleSaveBatch = async (batch: Batch) => {
+    const machine = machines.find(m => m.id === batch.machineId);
+    if (!machine) return;
+    const time = calculateBatchTime(batch, machine);
+    const updatedBatch = { ...batch, totalTime: time };
+    await syncAppData(machines, [...batches.filter(b => b.id !== updatedBatch.id), updatedBatch]);
+    loadData();
+  };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden">
-        <div className="p-6 border-b flex justify-between items-center bg-blue-700 text-white shrink-0">
-          <h3 className="text-xl font-black uppercase tracking-tight">Programación Avanzada</h3>
-          <button onClick={onClose} className="text-white text-3xl font-light">&times;</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-8 scrollbar-hide">
-          <form onSubmit={(e) => { e.preventDefault(); onAddBatch(formData); onClose(); }} className="space-y-8">
-            <section className="space-y-4">
-              <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] border-b border-blue-100 pb-2">1. Datos del Trabajo</h5>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nombre del Pedido</label>
-                  <input type="text" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Máquina</label>
-                  <select className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.machineId} onChange={e => setFormData({ ...formData, machineId: e.target.value })}>
-                    {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fecha Programada</label>
-                  <input type="date" className="w-full border-2 border-slate-200 rounded-xl p-3 font-bold bg-white" value={formData.scheduledDate} onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })} />
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] border-b border-emerald-100 pb-2">2. Cantidades y Estructura</h5>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Piezas</label>
-                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.pieces} onChange={e => setFormData({ ...formData, pieces: parseInt(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Golpes/Pza</label>
-                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.strikesPerPiece} onChange={e => setFormData({ ...formData, strikesPerPiece: parseInt(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Herram.</label>
-                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.toolChanges} onChange={e => setFormData({ ...formData, toolChanges: parseInt(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tramos</label>
-                  <input type="number" className="w-full font-black text-lg outline-none" value={formData.trams} onChange={e => setFormData({ ...formData, trams: parseInt(e.target.value) || 0 })} />
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.2em] border-b border-orange-100 pb-2">3. Configuración de Tiempos (min)</h5>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Puesta Punto (Base)</label>
-                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.setupTime} onChange={e => setFormData({ ...formData, setupTime: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Medición (x Ángulo)</label>
-                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.measurementTime} onChange={e => setFormData({ ...formData, measurementTime: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Golpe</label>
-                  <input type="number" step="0.001" className="w-full font-bold outline-none" value={formData.strikeTime} onChange={e => setFormData({ ...formData, strikeTime: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Cambio</label>
-                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.toolChangeTime} onChange={e => setFormData({ ...formData, toolChangeTime: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-1">Tiempo x Tramo</label>
-                  <input type="number" step="0.1" className="w-full font-bold outline-none" value={formData.tramTime} onChange={e => setFormData({ ...formData, tramTime: parseFloat(e.target.value) || 0 })} />
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <h5 className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">4. Maniobras de Volteo y Giro</h5>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-2xl border transition-all ${!formData.useCraneTurn ? 'bg-white border-blue-100 ring-2 ring-blue-50' : 'bg-slate-50 border-slate-100'}`}>
-                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
-                      <input type="radio" name="turnType" checked={!formData.useCraneTurn} onChange={() => setFormData({...formData, useCraneTurn: false})} />
-                      Volteo Manual (min)
-                    </label>
-                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.turnTime} onChange={e => setFormData({ ...formData, turnTime: parseFloat(e.target.value) || 0 })} disabled={formData.useCraneTurn} />
-                  </div>
-                  <div className={`p-4 rounded-2xl border transition-all ${formData.useCraneTurn ? 'bg-white border-orange-100 ring-2 ring-orange-50' : 'bg-slate-50 border-slate-100'}`}>
-                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
-                      <input type="radio" name="turnType" checked={formData.useCraneTurn} onChange={() => setFormData({...formData, useCraneTurn: true})} />
-                      Volteo Grúa (min)
-                    </label>
-                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.craneTurnTime} onChange={e => setFormData({ ...formData, craneTurnTime: parseFloat(e.target.value) || 0 })} disabled={!formData.useCraneTurn} />
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-2xl border transition-all ${!formData.useCraneRotate ? 'bg-white border-blue-100 ring-2 ring-blue-50' : 'bg-slate-50 border-slate-100'}`}>
-                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
-                      <input type="radio" name="rotateType" checked={!formData.useCraneRotate} onChange={() => setFormData({...formData, useCraneRotate: false})} />
-                      Giro Manual (min)
-                    </label>
-                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.rotateTime} onChange={e => setFormData({ ...formData, rotateTime: parseFloat(e.target.value) || 0 })} disabled={formData.useCraneRotate} />
-                  </div>
-                  <div className={`p-4 rounded-2xl border transition-all ${formData.useCraneRotate ? 'bg-white border-orange-100 ring-2 ring-orange-50' : 'bg-slate-50 border-slate-100'}`}>
-                    <label className="flex items-center gap-3 font-black text-xs text-slate-700 mb-3 cursor-pointer">
-                      <input type="radio" name="rotateType" checked={formData.useCraneRotate} onChange={() => setFormData({...formData, useCraneRotate: true})} />
-                      Giro Grúa (min)
-                    </label>
-                    <input type="number" step="0.01" className="w-full font-bold outline-none bg-transparent" value={formData.craneRotateTime} onChange={e => setFormData({ ...formData, craneRotateTime: parseFloat(e.target.value) || 0 })} disabled={!formData.useCraneRotate} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-200 pb-2">5. Observaciones</h5>
-              <div className="bg-white p-3 rounded-2xl border border-slate-200">
-                <textarea rows={3} className="w-full outline-none font-medium text-xs resize-none" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Instrucciones especiales para el operador..." />
-              </div>
-            </section>
-
-            <button type="submit" className="w-full bg-blue-700 text-white py-5 rounded-3xl font-black uppercase tracking-widest text-sm shadow-xl shadow-blue-200 active:scale-95 transition-all sticky bottom-0">Generar Programación en {machines.find(m => m.id === formData.machineId)?.id}</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const StopwatchModal: React.FC<{
-  isOpen: boolean; onClose: () => void; machines: MachineConfig[];
-  onSaveRecord: (rec: TimeRecord) => void;
-}> = ({ isOpen, onClose, machines, onSaveRecord }) => {
-  const [activeMachineId, setActiveMachineId] = useState(machines[0]?.id || '');
-  const [activeParam, setActiveParam] = useState<keyof MachineConfig>('strikeTime');
-  const [time, setTime] = useState(0); 
-  const [isRunning, setIsRunning] = useState(false);
-  const timerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (isRunning) {
-      const start = Date.now() - time * 1000;
-      timerRef.current = window.setInterval(() => setTime((Date.now() - start) / 1000), 10);
-    } else { if (timerRef.current) clearInterval(timerRef.current); }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isRunning, time]);
-
-  if (!isOpen) return null;
-
-  const handleCapture = () => {
-    if (time <= 0) return;
-    const val = time / 60;
-    const newRecord: TimeRecord = { id: `rec-${Date.now()}`, machineId: activeMachineId, parameter: activeParam, value: val, timestamp: new Date().toLocaleString() };
-    onSaveRecord(newRecord);
-    saveTimeStudy(newRecord).catch(() => {});
-    setTime(0);
-    setIsRunning(false);
+  const handleSaveMachine = async (machine: MachineConfig) => {
+    const updatedMachines = [...machines.filter(m => m.id !== machine.id), machine];
+    await syncAppData(updatedMachines, batches);
+    loadData();
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4">
-      <div className="bg-slate-900 rounded-[40px] shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-slate-800">
-        <div className="p-10 text-center border-b border-slate-800">
-           <h3 className="text-xs font-black uppercase tracking-[0.3em] mb-4 text-orange-500">Cronometraje Real</h3>
-           <div className="text-7xl font-mono font-black text-white tabular-nums tracking-tighter">
-             {time.toFixed(2)}<span className="text-2xl ml-1 text-slate-600 italic">s</span>
-           </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter']">
+      <header className="bg-white px-8 py-4 sticky top-0 z-40 shadow-sm border-b border-slate-200">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-4">
+            <img src={LOGO_URL} alt="METALLO" className="h-10 w-auto" />
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tighter leading-none uppercase">SIMULADOR DE PROGRAMACIÓN</h1>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Plataforma en Tiempo Real</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <Stopwatch machines={machines} onRecordSave={(msg) => { setStatus(msg); setTimeout(() => setStatus(""), 3000); }} />
+            <div className="flex gap-2">
+              <div className="px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-blue-600 uppercase tracking-widest border border-slate-100">{status || 'Sistema Activo'}</div>
+              <button onClick={handleSync} className="bg-blue-600 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200">Sincronizar</button>
+            </div>
+          </div>
         </div>
-        <div className="p-8 space-y-6 flex-1 bg-slate-900">
-           <div className="grid grid-cols-2 gap-3">
-              <select className="bg-slate-800 border border-slate-700 text-white rounded-2xl p-3 font-bold text-xs" value={activeMachineId} onChange={e => setActiveMachineId(e.target.value)}>
-                {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
-              </select>
-              <select className="bg-slate-800 border border-slate-700 text-white rounded-2xl p-3 font-bold text-xs" value={activeParam} onChange={e => setActiveParam(e.target.value as keyof MachineConfig)}>
-                {Object.entries(PARAM_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-           </div>
-           <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => setIsRunning(!isRunning)} className={`aspect-square flex flex-col items-center justify-center rounded-3xl font-black transition-all active:scale-90 ${isRunning ? 'bg-slate-800 text-orange-500' : 'bg-orange-500 text-white'}`}>
-                {isRunning ? <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> : <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
-                <span className="text-[10px] mt-1 uppercase tracking-tighter">{isRunning ? 'Pausa' : 'Inicio'}</span>
-              </button>
-              <button onClick={handleCapture} disabled={time <= 0} className="aspect-square flex flex-col items-center justify-center rounded-3xl bg-blue-600 text-white font-black shadow-lg shadow-blue-500/20 disabled:opacity-20 active:scale-90 transition-all">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-                <span className="text-[10px] mt-1 uppercase tracking-tighter">Captura</span>
-              </button>
-              <button onClick={() => { setTime(0); setIsRunning(false); }} className="aspect-square flex flex-col items-center justify-center rounded-3xl bg-slate-800 text-slate-400 font-black border border-slate-700 active:scale-90 transition-all">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                <span className="text-[10px] mt-1 uppercase tracking-tighter">Reset</span>
-              </button>
-           </div>
+        <nav className="flex gap-2">
+          {(['schedule', 'machines', 'tools', 'thickness', 'import'] as TabType[]).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 py-3 rounded-t-xl font-black text-[9px] uppercase tracking-[0.2em] transition-all border-b-2 ${activeTab === tab ? 'bg-slate-900 text-white border-blue-600' : 'bg-white text-slate-400 border-transparent hover:bg-slate-50'}`}>
+              {tab === 'schedule' ? 'Programación' : tab === 'machines' ? 'Máquinas' : tab === 'tools' ? 'Herramental' : tab === 'thickness' ? 'Espesores' : 'Importar'}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <main className="flex-1 p-8 overflow-y-auto">
+        {activeTab === 'schedule' && (
+          <div className="space-y-8">
+            <div className="flex justify-between items-center">
+               <h2 className="text-2xl font-black text-slate-900 uppercase">Carga de Planta</h2>
+               <div className="flex gap-4">
+                 <button onClick={() => setIsEditing({ type: 'batch', data: { id: `b-${Date.now()}`, name: '', machineId: machines[0]?.id, pieces: 10, strikesPerPiece: 4, thickness: 1.5, length: 500, width: 200, deliveryDate: new Date().toISOString().split('T')[0], toolIds: [], useCraneTurn: false, turnQuantity: 1, useCraneRotate: false, rotateQuantity: 1, requiresToolChange: true, totalTime: 0, scheduledDate: new Date().toISOString().split('T')[0], notes: '', priority: 'medium', trams: 1, toolChanges: 1 } })} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">+ Cargar Lote</button>
+                 <button onClick={runIA} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all">Optimizar con IA</button>
+               </div>
+            </div>
+
+            {iaWarnings && (
+              <div className="bg-red-50 border-2 border-red-200 p-6 rounded-[32px]">
+                <h3 className="text-red-900 font-black uppercase text-sm mb-4">Avisos Técnicos IA</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {iaWarnings.map((w, i) => <div key={i} className="bg-white p-3 rounded-xl border border-red-100 text-[9px] text-red-600 font-bold uppercase leading-tight">{w.reason}</div>)}
+                </div>
+                <button onClick={() => setIaWarnings(null)} className="mt-4 text-[9px] font-black text-red-400 uppercase">Cerrar</button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+              {machines.map(m => (
+                // Fix: Wrapped onDeleteBatch call to ensure it returns void and matches component prop type
+                <MachineProductionCard key={m.id} machine={m} batches={batches} onEditBatch={(b:any) => setIsEditing({ type: 'batch', data: b })} onDeleteBatch={(id:string) => { deleteBatchFromCloud(id); }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'machines' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-900 uppercase">Gestión de Máquinas</h2>
+              <button 
+                onClick={() => setIsEditing({ type: 'machine', data: { id: `PL-${Date.now()}`, name: '', description: '', strikeTime: 0.005, toolChangeTime: 5, setupTime: 10, measurementTime: 0.5, tramTime: 3, craneTurnTime: 1, craneRotateTime: 1, manualTurnTime: 0.05, manualRotateTime: 0.05, efficiency: 100, productiveHours: 16, maxLength: 3000, maxTons: 100, compatibleToolIds: [] }})}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+              >+ Nueva Máquina</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {machines.map(m => (
+                <div key={m.id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{m.id}</h3>
+                    <p className="text-[10px] font-bold text-slate-400 mb-4">{m.name}</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Capacidad:</span> <span className="text-slate-900">{m.maxTons}T / {m.maxLength}mm</span></div>
+                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Eficiencia:</span> <span className="text-blue-600">{m.efficiency}%</span></div>
+                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Jornada:</span> <span className="text-slate-900">{m.productiveHours}hs</span></div>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsEditing({ type: 'machine', data: m })} className="mt-6 w-full py-3 bg-slate-50 text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all">Configurar Parámetros</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'tools' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-900 uppercase">Herramental</h2>
+              <button 
+                onClick={() => setIsEditing({ type: 'tool', data: { id: `T-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: [] }})}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+              >+ Nueva Herramienta</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {tools.map(t => (
+                <div key={t.id} className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-sm flex justify-between items-center group hover:border-blue-300 transition-all">
+                  <div>
+                    <span className={`text-[7px] px-2 py-0.5 rounded-full font-black uppercase ${t.type === 'punch' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>{t.type === 'punch' ? 'Punzon' : 'Matriz'}</span>
+                    <h4 className="text-[11px] font-black text-slate-800 uppercase mt-1">{t.name}</h4>
+                    <p className="text-[8px] font-bold text-slate-400">{t.angle}° • {t.length}mm • {t.maxTons}T</p>
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => setIsEditing({ type: 'tool', data: t })} className="text-slate-300 hover:text-blue-600">✎</button>
+                    <button onClick={async () => { if(confirm('¿Eliminar herramienta?')) { await deleteTool(t.id); loadData(); }}} className="text-slate-300 hover:text-red-500 text-xl leading-none">&times;</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'thickness' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-900 uppercase">Espesores</h2>
+              <button 
+                onClick={() => setIsEditing({ type: 'thickness', data: { id: `TH-${Date.now()}`, value: 1.5, material: 'SAE 1010', recommendedToolIds: [] }})}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+              >+ Nuevo Espesor</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {thicknesses.map(th => (
+                <div key={th.id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-300 transition-all group">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{th.value} mm</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{th.material}</p>
+                    </div>
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => setIsEditing({ type: 'thickness', data: th })} className="text-slate-300 hover:text-blue-600">✎</button>
+                      <button onClick={async () => { if(confirm('¿Eliminar espesor?')) { await deleteThickness(th.id); loadData(); }}} className="text-slate-300 hover:text-red-500 text-xl leading-none">&times;</button>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-2xl">
+                    <span className="text-[8px] font-black text-slate-400 uppercase block mb-2">Herramientas Recomendadas:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {th.recommendedToolIds && th.recommendedToolIds.length > 0 ? th.recommendedToolIds.map(tid => {
+                        const tool = tools.find(t => t.id === tid);
+                        return <span key={tid} className="bg-white text-[9px] font-bold px-3 py-1 rounded-xl border border-slate-200 uppercase text-slate-700 shadow-sm">{tool?.name || tid}</span>;
+                      }) : <span className="text-[9px] text-slate-300 italic">No asignadas</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'import' && (
+          <div className="h-full flex items-center justify-center">
+            <div className="bg-white p-12 rounded-[40px] border-2 border-dashed border-slate-200 text-center max-w-xl shadow-sm">
+               <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                 <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+               </div>
+               <h3 className="text-xl font-black text-slate-900 uppercase mb-2">Importar Archivos</h3>
+               <p className="text-slate-500 text-sm mb-8">Carga tu planificación CSV o Excel para sincronizar con planta.</p>
+               <input type="file" className="hidden" id="csv-upload" />
+               <label htmlFor="csv-upload" className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-pointer hover:scale-105 transition-all inline-block shadow-lg">Seleccionar Archivo</label>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {isEditing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-5xl rounded-[40px] shadow-2xl overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b flex justify-between items-center bg-slate-900 text-white">
+               <h3 className="text-xl font-black uppercase tracking-tight">Gestionar {isEditing.type.toUpperCase()}</h3>
+               <button onClick={() => setIsEditing(null)} className="text-3xl font-light hover:rotate-90 transition-all">&times;</button>
+            </div>
+            <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto">
+               
+               {/* MODAL MAQUINA EXTENDIDO */}
+               {isEditing.type === 'machine' && (
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Básicos y Capacidad</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">ID Plegadora</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.id} disabled={true} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre Comercial</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Long. Max (mm)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxLength} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxLength: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Tons Max</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxTons} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxTons: Number(e.target.value)}})} /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Eficiencia %</label><input type="number" className="w-full bg-blue-50 border-2 border-blue-100 p-3 rounded-xl font-bold text-blue-900" value={isEditing.data.efficiency} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, efficiency: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Horas Jornada</label><input type="number" className="w-full bg-blue-50 border-2 border-blue-100 p-3 rounded-xl font-bold text-blue-900" value={isEditing.data.productiveHours} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, productiveHours: Number(e.target.value)}})} /></div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Preparación (Setups)</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Puesta a Punto Base (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.setupTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, setupTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Herr. Unitario (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.toolChangeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, toolChangeTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Tramo (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.tramTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, tramTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-orange-600 mb-1 block">Medición Técnica (min)</label><input type="number" step="0.1" className="w-full bg-orange-50 border-2 border-orange-100 p-3 rounded-xl font-bold text-orange-900" value={isEditing.data.measurementTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, measurementTime: Number(e.target.value)}})} /></div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest border-b pb-2">Operación y Maniobras</h4>
+                      <div><label className="text-[9px] font-black uppercase text-emerald-600 mb-1 block">Tiempo por Golpe (min)</label><input type="number" step="0.001" className="w-full bg-emerald-50 border-2 border-emerald-100 p-3 rounded-xl font-bold text-emerald-900" value={isEditing.data.strikeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, strikeTime: Number(e.target.value)}})} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Volteo (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneTurnTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Giro (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneRotateTime: Number(e.target.value)}})} /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Volteo (min)</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualTurnTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Giro (min)</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualRotateTime: Number(e.target.value)}})} /></div>
+                      </div>
+                    </section>
+                 </div>
+               )}
+
+               {/* MODAL LOTE */}
+               {isEditing.type === 'batch' && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Información del Lote</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre/Código</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cant. Piezas</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.pieces} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, pieces: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Golpes/Pza</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.strikesPerPiece} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, strikesPerPiece: Number(e.target.value)}})} /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Espesor (mm)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.thickness} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, thickness: Number(e.target.value)}})} /></div>
+                        <div>
+                          <label className={`text-[9px] font-black uppercase mb-1 block ${!isEditing.data.requiresToolChange ? 'text-slate-300' : 'text-slate-400'}`}>Tramos</label>
+                          <input type="number" disabled={!isEditing.data.requiresToolChange} className={`w-full border-2 p-3 rounded-xl font-bold ${!isEditing.data.requiresToolChange ? 'bg-slate-100 text-slate-300' : 'bg-slate-50'}`} value={isEditing.data.trams} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, trams: Number(e.target.value)}})} />
+                        </div>
+                      </div>
+                    </section>
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Maniobras Especiales</h4>
+                      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input type="checkbox" className="w-5 h-5 rounded text-blue-600" checked={isEditing.data.requiresToolChange} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, requiresToolChange: e.target.checked}})} />
+                          <span className="text-[10px] font-black uppercase">Cambio de Herramental</span>
+                        </label>
+                        {isEditing.data.requiresToolChange && <input type="number" className="w-16 bg-white border-2 border-slate-200 p-1 rounded-xl font-bold text-center" value={isEditing.data.toolChanges} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, toolChanges: Number(e.target.value)}})} />}
+                      </div>
+                      <div className="space-y-3">
+                        <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100">
+                          <label className="flex items-center gap-3 cursor-pointer mb-2">
+                            <input type="checkbox" className="w-5 h-5 rounded text-emerald-600" checked={isEditing.data.useCraneTurn} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneTurn: e.target.checked}})} />
+                            <span className="text-[10px] font-black uppercase text-emerald-800">Volteo Puente Grúa</span>
+                          </label>
+                          {isEditing.data.useCraneTurn && <input type="number" className="w-full bg-white border-2 border-emerald-100 p-2 rounded-xl font-bold" value={isEditing.data.turnQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: Number(e.target.value)}})} />}
+                        </div>
+                        <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100">
+                          <label className="flex items-center gap-3 cursor-pointer mb-2">
+                            <input type="checkbox" className="w-5 h-5 rounded text-blue-600" checked={isEditing.data.useCraneRotate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneRotate: e.target.checked}})} />
+                            <span className="text-[10px] font-black uppercase text-blue-800">Giro Puente Grúa</span>
+                          </label>
+                          {isEditing.data.useCraneRotate && <input type="number" className="w-full bg-white border-2 border-blue-100 p-2 rounded-xl font-bold" value={isEditing.data.rotateQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: Number(e.target.value)}})} />}
+                        </div>
+                      </div>
+                    </section>
+                 </div>
+               )}
+
+               {/* MODAL HERRAMIENTA */}
+               {isEditing.type === 'tool' && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Datos Técnicos</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre/Identificación</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
+                      <div>
+                        <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Tipo</label>
+                        <div className="flex gap-2">
+                          <button onClick={() => setIsEditing({...isEditing, data: {...isEditing.data, type: 'punch'}})} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${isEditing.data.type === 'punch' ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>Punzon</button>
+                          <button onClick={() => setIsEditing({...isEditing, data: {...isEditing.data, type: 'die'}})} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase border-2 transition-all ${isEditing.data.type === 'die' ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>Matriz</button>
+                        </div>
+                      </div>
+                    </section>
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Especificaciones</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Ángulo (°)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.angle} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, angle: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Longitud (mm)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} /></div>
+                      </div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Carga Max (Tons/m)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxTons} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxTons: Number(e.target.value)}})} /></div>
+                    </section>
+                 </div>
+               )}
+
+               {/* MODAL ESPESOR */}
+               {isEditing.type === 'thickness' && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Configuración Material</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Valor Espesor (mm)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.value} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, value: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Material (ej: SAE 1010)</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.material} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, material: e.target.value}})} /></div>
+                    </section>
+                    <section className="space-y-4">
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Herramental Asociado</h4>
+                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2">
+                        {tools.map(t => (
+                          <label key={t.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all">
+                            <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={isEditing.data.recommendedToolIds?.includes(t.id)} onChange={e => {
+                              const ids = isEditing.data.recommendedToolIds || [];
+                              const newIds = e.target.checked ? [...ids, t.id] : ids.filter((id:string) => id !== t.id);
+                              setIsEditing({...isEditing, data: {...isEditing.data, recommendedToolIds: newIds}});
+                            }} />
+                            <span className="text-[10px] font-black uppercase text-slate-700">{t.name} <span className="text-[8px] text-slate-400 ml-2">({t.type === 'punch' ? 'Punzon' : 'Matriz'})</span></span>
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                 </div>
+               )}
+            </div>
+            <div className="p-8 border-t bg-slate-50 flex justify-end gap-3">
+               <button onClick={() => setIsEditing(null)} className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Cancelar</button>
+               <button onClick={async () => {
+                 setStatus("Guardando...");
+                 if (isEditing.type === 'batch') await handleSaveBatch(isEditing.data);
+                 else if (isEditing.type === 'machine') await handleSaveMachine(isEditing.data);
+                 else if (isEditing.type === 'tool') await saveTool(isEditing.data);
+                 else if (isEditing.type === 'thickness') await saveThickness(isEditing.data);
+                 
+                 setIsEditing(null);
+                 loadData();
+                 setStatus("Cambios Guardados");
+                 setTimeout(() => setStatus(""), 2000);
+               }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all">Confirmar Cambios</button>
+            </div>
+          </div>
         </div>
-        <button onClick={onClose} className="p-6 bg-slate-800 text-slate-500 font-black uppercase tracking-[0.2em] text-[10px] border-t border-slate-700">Cerrar</button>
+      )}
+    </div>
+  );
+}
+
+function Stopwatch({ machines, onRecordSave }: { machines: MachineConfig[], onRecordSave: (msg: string) => void }) {
+  const [activeMachine, setActiveMachine] = useState<string>('');
+  const [activeParam, setActiveParam] = useState<keyof MachineConfig>('strikeTime');
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const timerRef = useRef<any>(null);
+
+  const start = () => { if (!isRunning) { setIsRunning(true); timerRef.current = setInterval(() => setTime(t => t + 1), 1000); } };
+  const stop = () => { setIsRunning(false); if (timerRef.current) clearInterval(timerRef.current); };
+  const reset = () => { stop(); setTime(0); };
+
+  const handleSave = async () => {
+    if (!activeMachine || time === 0) return;
+    const record: TimeRecord = { id: `tr-${Date.now()}`, machineId: activeMachine, parameter: activeParam, value: time / 60, timestamp: new Date().toISOString() };
+    await saveTimeRecord(record);
+    onRecordSave(`Estudio guardado: ${activeMachine}`);
+    reset();
+  };
+
+  return (
+    <div className="flex items-center gap-4 bg-slate-900 px-4 py-2 rounded-2xl border border-slate-700 shadow-xl">
+      <div className="flex flex-col">
+        <select className="bg-transparent text-white text-[9px] font-black uppercase outline-none" value={activeMachine} onChange={(e) => setActiveMachine(e.target.value)}>
+          <option value="" className="bg-slate-900">Plegadora</option>
+          {machines.map(m => <option key={m.id} value={m.id} className="bg-slate-900">{m.id}</option>)}
+        </select>
+        <select className="bg-transparent text-slate-400 text-[8px] font-black uppercase outline-none" value={activeParam} onChange={(e) => setActiveParam(e.target.value as any)}>
+          <option value="strikeTime" className="bg-slate-900">Golpe</option>
+          <option value="setupTime" className="bg-slate-900">Puesta Punto</option>
+          <option value="toolChangeTime" className="bg-slate-900">Cambio Herr.</option>
+        </select>
+      </div>
+      <div className="text-blue-400 font-mono text-xl font-black w-20 text-center tracking-tighter">
+        {Math.floor(time / 60)}:{(time % 60).toString().padStart(2, '0')}
+      </div>
+      <div className="flex gap-2">
+        {!isRunning ? (
+          <button onClick={start} className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/40 transition-all">▶</button>
+        ) : (
+          <button onClick={stop} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/40 transition-all">■</button>
+        )}
+        <button onClick={handleSave} className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/40 transition-all">💾</button>
       </div>
     </div>
   );
-};
+}
 
-const MachineColumn: React.FC<{ machine: MachineConfig, batches: Batch[], onDeleteBatch: (id: string) => void }> = ({ machine, batches, onDeleteBatch }) => {
-  const scheduleByDate = useMemo(() => {
-    const dates: Record<string, DailySchedule> = {};
-    const filtered = batches.filter(b => b.machineId === machine.id);
-    filtered.forEach(b => {
-      if (!dates[b.scheduledDate]) dates[b.scheduledDate] = { date: b.scheduledDate, batches: [], totalTime: 0, capacityPercentage: 0 };
-      dates[b.scheduledDate].batches.push(b);
-      dates[b.scheduledDate].totalTime += b.totalTime;
-    });
-    const capacityPerDay = (Number(machine.productiveHours) || 16) * 60; 
-    Object.values(dates).forEach(d => d.capacityPercentage = Math.min(100, (d.totalTime / capacityPerDay) * 100));
-    return Object.values(dates).sort((a, b) => b.date.localeCompare(a.date));
-  }, [batches, machine]);
+// Fix: Updated prop types to allow Promise or void return for onDeleteBatch and onEditBatch to resolve TS mismatch errors
+function MachineProductionCard({ machine, batches, onEditBatch, onDeleteBatch }: { machine: MachineConfig, batches: Batch[], onEditBatch: (b: Batch) => void | Promise<any>, onDeleteBatch: (id: string) => void | Promise<any> }) {
+  const machineBatches = batches
+    .filter(b => b.machineId === machine.id)
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+
+  const totalMinutes = machineBatches.reduce((acc, b) => acc + (b.totalTime || 0), 0);
+  const capacityMinutes = (machine.productiveHours || 16) * 60;
+  const occupancy = Math.min(100, (totalMinutes / capacityMinutes) * 100);
 
   return (
-    <div className="bg-white rounded-[32px] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col min-h-[400px]">
-      <div className="p-6 flex justify-between items-center border-b border-slate-50 bg-slate-50/50">
-        <div>
-          <h3 className="text-2xl font-black tracking-tighter text-slate-900">{machine.id}</h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{machine.name}</p>
+    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px] hover:shadow-lg transition-all group">
+      <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex justify-between items-start mb-3">
+          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{machine.id}</h3>
+          <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${occupancy > 90 ? 'bg-red-500 text-white' : occupancy > 70 ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'}`}>
+            {occupancy.toFixed(0)}%
+          </span>
         </div>
-        <div className="text-right">
-          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">{machine.efficiency}% EFI</span>
+        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-blue-600 h-full transition-all duration-1000" style={{ width: `${occupancy}%` }} />
+        </div>
+        <div className="flex justify-between mt-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+          <span>{formatTime(totalMinutes)}</span>
+          <span>{machine.productiveHours}HS Capacidad</span>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 max-h-[550px] scrollbar-hide">
-        {scheduleByDate.length === 0 ? (
-          <div className="py-24 text-center text-slate-300 italic text-sm font-medium">Sin carga de trabajo</div>
+
+      <div className="flex-1 p-4 space-y-3 overflow-y-auto scrollbar-hide">
+        {machineBatches.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Sin carga programada</div>
         ) : (
-          scheduleByDate.map(day => (
-            <div key={day.date} className="bg-slate-50 rounded-3xl p-5 border border-slate-100">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest bg-white px-3 py-1.5 rounded-xl border border-slate-200">{day.date}</span>
-                <span className={`text-[10px] font-black px-3 py-1.5 rounded-xl ${day.capacityPercentage > 90 ? 'bg-red-500 text-white' : 'bg-blue-700 text-white'}`}>{day.capacityPercentage.toFixed(0)}%</span>
+          machineBatches.map(batch => (
+            <div key={batch.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-blue-200 hover:shadow-md transition-all relative group/item">
+              <div className="flex justify-between mb-1">
+                <span className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[140px]">{batch.name}</span>
+                <span className="text-[9px] font-black text-blue-600">{formatTime(batch.totalTime)}</span>
               </div>
-              <div className="space-y-3">
-                {day.batches.map(b => (
-                  <div key={b.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center group shadow-sm active:scale-[0.98] transition-all">
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="text-xs font-black text-slate-900 truncate uppercase tracking-tight">{b.name}</div>
-                      <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{formatTime(b.totalTime)} • {b.pieces} pzs</div>
-                    </div>
-                    <button onClick={() => onDeleteBatch(b.id)} className="text-slate-300 hover:text-red-500 transition-colors p-2 text-2xl font-light">&times;</button>
-                  </div>
-                ))}
+              <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase">
+                <span>{batch.pieces} Pzs • {batch.thickness}mm</span>
+              </div>
+              <div className="mt-3 flex gap-2 opacity-0 group-hover/item:opacity-100 transition-all">
+                <button onClick={() => onEditBatch(batch)} className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-1 rounded-lg">Editar</button>
+                <button onClick={() => { if(confirm('¿Eliminar lote?')) onDeleteBatch(batch.id); }} className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-lg">Borrar</button>
               </div>
             </div>
           ))
         )}
       </div>
-    </div>
-  );
-};
-
-const SettingsModal: React.FC<{ 
-  isOpen: boolean, 
-  onClose: () => void, 
-  machines: MachineConfig[], 
-  onSave: (newMachines: MachineConfig[]) => void 
-}> = ({ isOpen, onClose, machines, onSave }) => {
-  const [localMachines, setLocalMachines] = useState<MachineConfig[]>([]);
-  const [editingMachineId, setEditingMachineId] = useState<string | null>(null);
-
-  useEffect(() => { 
-    if (isOpen) {
-      setLocalMachines(JSON.parse(JSON.stringify(machines))); 
-      setEditingMachineId(null);
-    }
-  }, [isOpen, machines]);
-
-  if (!isOpen) return null;
-
-  const updateField = (id: string, field: keyof MachineConfig, value: any) => 
-    setLocalMachines(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
-
-  const currentMachine = localMachines.find(m => m.id === editingMachineId);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/80 backdrop-blur-md p-0 sm:p-4">
-      <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-        <div className="p-6 sm:p-8 border-b flex justify-between items-center bg-slate-900 text-white shrink-0">
-          <div className="flex items-center gap-4">
-            {editingMachineId && (
-              <button onClick={() => setEditingMachineId(null)} className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
-              </button>
-            )}
-            <div>
-              <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-none">{editingMachineId ? `Config: ${editingMachineId}` : 'Parámetros por Plegadora'}</h3>
-              {!editingMachineId && <p className="text-[9px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-2">Seleccione una máquina para editar</p>}
-            </div>
-          </div>
-          <button onClick={onClose} className="text-white text-4xl font-light p-2">&times;</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50 scrollbar-hide">
-          {!editingMachineId ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
-              {localMachines.map(m => (
-                <button key={m.id} onClick={() => setEditingMachineId(m.id)} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/10 transition-all text-left group active:scale-95">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">{m.id}</div>
-                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg></div>
-                  </div>
-                  <h4 className="font-black text-slate-900 text-lg uppercase leading-tight mb-1">{m.name}</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{m.description || 'Configuración general'}</p>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-              {currentMachine && (
-                <div className="bg-white p-6 sm:p-10 rounded-[40px] border border-slate-200 shadow-sm space-y-10">
-                  <div>
-                    <h5 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Información Básica</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                      <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nombre Comercial</label><input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.name} onChange={e => updateField(currentMachine.id, 'name', e.target.value)} /></div>
-                      <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Descripción Corta</label><input type="text" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-medium text-sm focus:border-blue-600 outline-none bg-slate-50/50" value={currentMachine.description} onChange={e => updateField(currentMachine.id, 'description', e.target.value)} /></div>
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Base de Tiempos Globales (min)</h5>
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Puesta a Punto</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.setupTime} onChange={e => updateField(currentMachine.id, 'setupTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Control Medición</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.measurementTime} onChange={e => updateField(currentMachine.id, 'measurementTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Veloc. Golpe</label><input type="number" step="0.001" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.strikeTime} onChange={e => updateField(currentMachine.id, 'strikeTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Cambio Herram.</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.toolChangeTime} onChange={e => updateField(currentMachine.id, 'toolChangeTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Tiempo x Tramo</label><input type="number" step="0.1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.tramTime} onChange={e => updateField(currentMachine.id, 'tramTime', parseFloat(e.target.value))} /></div>
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-black text-orange-600 uppercase tracking-[0.3em] mb-6 border-b pb-2">Capacidad y Maniobras</h5>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Eficiencia %</label><input type="number" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.efficiency} onChange={e => updateField(currentMachine.id, 'efficiency', parseInt(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Horas/Día</label><input type="number" step="1" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.productiveHours} onChange={e => updateField(currentMachine.id, 'productiveHours', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualTurnTime} onChange={e => updateField(currentMachine.id, 'manualTurnTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Volteo Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneTurnTime} onChange={e => updateField(currentMachine.id, 'craneTurnTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Manual</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.manualRotateTime} onChange={e => updateField(currentMachine.id, 'manualRotateTime', parseFloat(e.target.value))} /></div>
-                      <div><label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Giro Grúa</label><input type="number" step="0.01" className="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold focus:border-blue-600 outline-none" value={currentMachine.craneRotateTime} onChange={e => updateField(currentMachine.id, 'craneRotateTime', parseFloat(e.target.value))} /></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="p-6 sm:p-8 border-t bg-white flex justify-between items-center shrink-0">
-          <button onClick={onClose} className="px-6 py-4 font-black text-slate-400 uppercase text-[10px] tracking-widest hover:text-slate-600">Cerrar Ventana</button>
-          <button onClick={() => { onSave(localMachines); onClose(); }} className="px-10 py-5 bg-blue-700 text-white rounded-[24px] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-700/30 active:scale-95 transition-all flex items-center gap-3"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>Aplicar Cambios</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default function App() {
-  const [machines, setMachines] = useState<MachineConfig[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [records, setRecords] = useState<TimeRecord[]>([]);
-  const [isBatchOpen, setIsBatchOpen] = useState(false);
-  const [isStopwatchOpen, setIsStopwatchOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [status, setStatus] = useState("");
-
-  useEffect(() => {
-    const savedM = localStorage.getItem(STORAGE_KEYS.CONFIG);
-    const savedB = localStorage.getItem(STORAGE_KEYS.BATCHES);
-    const savedR = localStorage.getItem(STORAGE_KEYS.RECORDS);
-    if (savedM) setMachines(JSON.parse(savedM)); else setMachines(INITIAL_MACHINES);
-    if (savedB) setBatches(JSON.parse(savedB));
-    if (savedR) setRecords(JSON.parse(savedR));
-
-    if (initSupabase(SUPABASE_URL, SUPABASE_KEY)) {
-      fetchMachines().then(m => { if(m.length) setMachines(m); });
-      fetchBatches().then(b => { if(b.length) setBatches(b); });
-      fetchTimeRecords().then(r => { if(r.length) setRecords(r); });
-    }
-  }, []);
-
-  const handleSync = useCallback(async (m: MachineConfig[], b: Batch[]) => {
-    const cloud = checkCloudStatus();
-    if (!cloud.available) return;
-    try { await syncAppData(m, b); setStatus("Sincronizado"); } catch (e) { setStatus("Error Nube"); }
-    setTimeout(() => setStatus(""), 3000);
-  }, []);
-
-  const handleAddBatch = (batchInput: any) => {
-    const machine = machines.find(m => m.id === batchInput.machineId);
-    if (!machine) return;
-    const totalTime = calculateBatchTime(batchInput, machine);
-    const newBatch = { ...batchInput, id: `b-${Date.now()}`, totalTime };
-    const updated = [...batches, newBatch];
-    setBatches(updated);
-    localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(updated));
-    handleSync(machines, updated);
-  };
-
-  const handleSaveRecord = (rec: TimeRecord) => {
-    const updated = [rec, ...records];
-    setRecords(updated);
-    localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
-  };
-
-  const handleDeleteBatch = async (id: string) => {
-    const updated = batches.filter(b => b.id !== id);
-    setBatches(updated);
-    localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(updated));
-    await deleteBatchFromCloud(id);
-    setStatus("Sincronizado");
-    setTimeout(() => setStatus(""), 2000);
-  };
-
-  const handleDeleteRecord = async (id: string) => {
-    const updated = records.filter(r => r.id !== id);
-    setRecords(updated);
-    localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
-    await deleteTimeRecordFromCloud(id);
-    setStatus("Sincronizado");
-    setTimeout(() => setStatus(""), 2000);
-  };
-
-  if (machines.length === 0) return <div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white"><div className="text-center"><div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="font-black uppercase tracking-[0.2em] text-xs">Cargando Metallo...</p></div></div>;
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter'] pb-10">
-      <header className="bg-white px-5 pt-6 pb-6 flex flex-col gap-6 sticky top-0 z-40 shadow-xl shadow-slate-200/40 border-b border-slate-100">
-        <div className="flex justify-between items-center">
-           <div className="flex items-center gap-4">
-              <img src={LOGO_URL} alt="METALLO" className="h-16 w-auto object-contain" />
-              <div className="flex flex-col"><span className="text-slate-900 font-black text-lg leading-none uppercase tracking-wider">Simulador de Programación</span><span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Control de Producción Metallo</span></div>
-           </div>
-           <button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 flex items-center justify-center bg-slate-50 rounded-2xl text-slate-400 shadow-inner border border-slate-100 active:scale-90 transition-all"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
-        </div>
-        <div className="flex gap-3 h-20">
-           <button onClick={() => setIsStopwatchOpen(true)} className="aspect-square h-full bg-orange-500 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-orange-500/30 active:scale-95 transition-all border-b-4 border-orange-600"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span className="text-[9px] font-black uppercase mt-1.5 tracking-tighter">Cronógrafo</span></button>
-           <button onClick={() => setIsHistoryOpen(true)} className="flex-1 h-full bg-slate-900 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-slate-900/30 active:scale-95 transition-all border-b-4 border-slate-950"><svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg><span className="text-[10px] font-black uppercase mt-1.5 tracking-widest text-blue-100">Tiempos Tomados</span></button>
-           <button onClick={() => setIsBatchOpen(true)} className="flex-1 h-full bg-blue-700 rounded-3xl flex flex-col items-center justify-center text-white shadow-2xl shadow-blue-700/30 active:scale-95 transition-all border-b-4 border-blue-800"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg><span className="text-[10px] font-black uppercase mt-1.5 tracking-widest">Programar</span></button>
-        </div>
-        {status && <div className="text-center text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] animate-pulse">{status}</div>}
-      </header>
-      <main className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 max-w-[2400px] mx-auto w-full">
-         {machines.map(m => (
-           <MachineColumn key={m.id} machine={m} batches={batches} onDeleteBatch={handleDeleteBatch} />
-         ))}
-      </main>
-      <BatchModal isOpen={isBatchOpen} onClose={() => setIsBatchOpen(false)} machines={machines} onAddBatch={handleAddBatch} />
-      <StopwatchModal isOpen={isStopwatchOpen} onClose={() => setIsStopwatchOpen(false)} machines={machines} onSaveRecord={handleSaveRecord} />
-      <HistoryModal isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} records={records} machines={machines} onDeleteRecord={handleDeleteRecord} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} machines={machines} onSave={m => { setMachines(m); handleSync(m, batches); }} />
     </div>
   );
 }

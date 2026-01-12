@@ -13,78 +13,48 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   const {
     pieces = 0,
     strikesPerPiece = 0,
-    trams = 0,
-    toolChanges = 0,
-    // Overrides o fallback a máquina
-    strikeTime: bStrike,
-    toolChangeTime: bToolChange,
-    tramTime: bTram,
-    setupTime: bSetup,
-    measurementTime: bMeasure,
-    turnTime: bTurn, // manual turn
-    rotateTime: bRotate, // manual rotate
-    craneTurnTime: bCraneTurn,
-    craneRotateTime: bCraneRotate,
+    trams = 1,
+    toolChanges = 1,
     useCraneTurn = false,
-    useCraneRotate = false
+    turnQuantity = 1,
+    useCraneRotate = false,
+    rotateQuantity = 1,
+    requiresToolChange = false
   } = batch;
 
-  // Resolución de tiempos base
-  const strike = bStrike || machine.strikeTime || 0;
-  const toolChangeUnit = bToolChange || machine.toolChangeTime || 0;
-  const tramUnit = bTram || machine.tramTime || 0;
-  const setupUnit = bSetup || machine.setupTime || 0;
-  const measureUnit = bMeasure || machine.measurementTime || 0;
+  // Tiempos base de máquina
+  const strike = machine.strikeTime || 0.005;
+  const toolUnit = machine.toolChangeTime || 5;
+  const setupUnit = machine.setupTime || 10;
+  const measureUnit = machine.measurementTime || 0.5;
   
-  // Resolución de maniobras (Manual vs Grúa)
-  const effectiveTurn = useCraneTurn 
-    ? (bCraneTurn || machine.craneTurnTime || 0)
-    : (bTurn || machine.manualTurnTime || 0);
+  // Lógica de maniobras
+  const manualTurn = machine.manualTurnTime || 0.05;
+  const manualRotate = machine.manualRotateTime || 0.05;
 
-  const effectiveRotate = useCraneRotate 
-    ? (bCraneRotate || machine.craneRotateTime || 0)
-    : (bRotate || machine.manualRotateTime || 0);
+  const totalTurnTime = useCraneTurn 
+    ? (machine.craneTurnTime * turnQuantity) 
+    : manualTurn;
+
+  const totalRotateTime = useCraneRotate 
+    ? (machine.craneRotateTime * rotateQuantity) 
+    : manualRotate;
   
-  // 1. Puesta a Punto (Setup): Tiempo base * Cantidad de cambios de herramental
-  const totalSetupTime = setupUnit * toolChanges;
-
-  // 2. Tiempos Técnicos: (Herramentales * Tiempo de cambio) + (Tramos * Tiempo de tramo)
-  const technicalChangeTime = (toolChanges * toolChangeUnit) + (trams * tramUnit);
+  // 1. Puesta a Punto e infraestructura (Solo si requiere cambio de herramental)
+  const totalSetup = requiresToolChange ? (setupUnit * toolChanges) : 0;
+  const techTime = requiresToolChange 
+    ? ((toolChanges * toolUnit) + (trams * (machine.tramTime || 3))) 
+    : 0;
   
-  // 3. Operación neta por pieza (Golpes + Maniobras por golpe)
-  const operationPerPiece = strikesPerPiece * (strike + effectiveTurn + effectiveRotate);
-  const totalOperationTime = operationPerPiece * pieces;
+  // 2. Operación neta (Golpes + Maniobras sumadas por pieza)
+  const operationPerPiece = (strikesPerPiece * strike) + totalTurnTime + totalRotateTime;
+  const totalOp = operationPerPiece * pieces;
 
-  // 4. Medición: Frecuencia 1 y cada 10 piezas
+  // 3. Medición periódica (cada 10 piezas)
   const numChecks = pieces > 0 ? Math.floor((pieces - 1) / 10) + 1 : 0;
-  const timePerCheck = measureUnit * (strikesPerPiece + 1);
-  const totalMeasurementTime = timePerCheck * numChecks;
+  const checkTime = measureUnit * (strikesPerPiece + 1);
+  const totalMeasure = checkTime * numChecks;
   
-  const baseTotal = totalSetupTime + technicalChangeTime + totalOperationTime + totalMeasurementTime;
-  const finalTime = baseTotal / ((machine.efficiency || 100) / 100);
-  
-  return finalTime;
-};
-
-export const findAvailableDate = (
-  machine: MachineConfig, 
-  requiredMinutes: number, 
-  existingBatches: Batch[]
-): string => {
-  let checkDate = new Date();
-  const dailyCapacity = (machine.productiveHours || 16) * 60;
-  for (let i = 0; i < 365; i++) {
-    if (checkDate.getDay() === 0 || checkDate.getDay() === 6) {
-      checkDate.setDate(checkDate.getDate() + 1);
-      continue;
-    }
-    const dateStr = checkDate.toISOString().split('T')[0];
-    const dayBatches = existingBatches.filter(b => b.machineId === machine.id && b.scheduledDate === dateStr);
-    const dayUsedTime = dayBatches.reduce((sum, b) => sum + b.totalTime, 0);
-    if (dayUsedTime + requiredMinutes <= dailyCapacity) {
-      return dateStr;
-    }
-    checkDate.setDate(checkDate.getDate() + 1);
-  }
-  return new Date().toISOString().split('T')[0];
+  const rawTotal = totalSetup + techTime + totalOp + totalMeasure;
+  return rawTotal / ((machine.efficiency || 100) / 100);
 };

@@ -1,20 +1,40 @@
 
+export interface Thickness {
+  id: string;
+  value: number; // mm
+  material: string;
+  recommendedToolIds: string[];
+}
+
+export interface Tool {
+  id: string;
+  name: string;
+  type: 'punch' | 'die';
+  vWidth?: number; // solo para matrices
+  angle: number;
+  maxTons: number;
+  length: number;
+  compatibleMachineIds: string[];
+}
+
 export interface MachineConfig {
   id: string;
   name: string;
   description: string;
-  imageUrl?: string;
-  strikeTime: number; // minutes
-  toolChangeTime: number; // minutes
-  setupTime: number; // minutes (Puesta a punto)
-  measurementTime: number; // minutes (Tiempo de medición por ángulo)
-  tramTime: number; // minutes per tram
-  craneTurnTime: number; // minutes (bridge crane)
-  craneRotateTime: number; // minutes (bridge crane)
-  manualTurnTime: number; // minutes (manual handling)
-  manualRotateTime: number; // minutes (manual handling)
-  efficiency: number; // percentage
-  productiveHours: number; // hours per day
+  strikeTime: number;
+  toolChangeTime: number;
+  setupTime: number;
+  measurementTime: number;
+  tramTime: number;
+  craneTurnTime: number;
+  craneRotateTime: number;
+  manualTurnTime: number;
+  manualRotateTime: number;
+  efficiency: number;
+  productiveHours: number;
+  maxLength: number; // mm
+  maxTons: number;
+  compatibleToolIds: string[];
 }
 
 export interface Batch {
@@ -24,31 +44,23 @@ export interface Batch {
   pieces: number;
   strikesPerPiece: number;
   trams: number;
-  toolChanges: number; 
-  // Overrides para el lote específico
-  strikeTime?: number;
-  toolChangeTime?: number;
-  tramTime?: number;
-  setupTime?: number;
-  measurementTime?: number;
-  turnTime?: number; // Manual turn override
-  rotateTime?: number; // Manual rotate override
-  craneTurnTime?: number; // Crane turn override
-  craneRotateTime?: number; // Crane rotate override
+  toolChanges: number;
+  thickness: number;
+  length: number;
+  width: number;
+  deliveryDate: string;
+  toolIds: string[];
   
   useCraneTurn: boolean;
+  turnQuantity: number; // Nueva cantidad de volteos
   useCraneRotate: boolean;
+  rotateQuantity: number; // Nueva cantidad de giros
+  
   requiresToolChange: boolean;
   totalTime: number;
   scheduledDate: string;
   notes: string;
-}
-
-export interface DailySchedule {
-  date: string;
-  batches: Batch[];
-  totalTime: number;
-  capacityPercentage: number;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
 }
 
 export interface TimeRecord {
