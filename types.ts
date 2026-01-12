@@ -67,7 +67,7 @@ export interface Batch {
 export interface TimeRecord {
   id: string;
   machineId: string;
-  parameter: keyof MachineConfig;
+  parameter: keyof MachineConfig | 'totalTime';
   value: number;
   timestamp: string;
 }

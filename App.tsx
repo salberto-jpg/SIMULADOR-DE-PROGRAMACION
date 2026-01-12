@@ -95,7 +95,7 @@ export default function App() {
   const [swTime, setSwTime] = useState(0);
   const [swIsRunning, setSwIsRunning] = useState(false);
   const [swMachine, setSwMachine] = useState('PL-01');
-  const [swParam, setSwParam] = useState<keyof MachineConfig>('strikeTime');
+  const [swParam, setSwParam] = useState<keyof MachineConfig | 'totalTime'>('strikeTime');
   const [isSwExpanded, setIsSwExpanded] = useState(false);
   const swIntervalRef = useRef<any>(null);
 
@@ -257,6 +257,7 @@ export default function App() {
                 {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
               </select>
               <select className="w-full bg-slate-800 p-3 rounded-xl text-[10px] font-bold uppercase" value={swParam} onChange={e => setSwParam(e.target.value as any)}>
+                <option value="totalTime">Tiempo de Lote</option>
                 <option value="strikeTime">Tiempo de Golpe</option>
                 <option value="toolChangeTime">Cambio Herramental</option>
                 <option value="setupTime">Setup Inicial</option>
