@@ -2,8 +2,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { MachineConfig, Batch, Tool, Thickness } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const optimizeProductionSchedule = async (
   pendingOrders: Batch[],
   machines: MachineConfig[],
@@ -11,6 +9,9 @@ export const optimizeProductionSchedule = async (
   thicknesses: Thickness[]
 ) => {
   try {
+    // Inicializar la IA justo antes de usarla para asegurar que la API_KEY inyectada esté disponible
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const prompt = `Actúa como un experto en Lean Manufacturing y programación de plegado CNC.
     OBJETIVO: Optimizar la carga de máquinas cumpliendo estrictamente con las capacidades técnicas.
     
