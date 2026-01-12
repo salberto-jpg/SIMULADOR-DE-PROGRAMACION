@@ -8,9 +8,19 @@ export const optimizeProductionSchedule = async (
   tools: Tool[],
   thicknesses: Thickness[]
 ) => {
+  // Verificación ultra-defensiva de la API KEY antes de instanciar el SDK
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey || apiKey === "") {
+    console.error("CRITICAL ERROR: process.env.API_KEY is missing or empty. Gemini cannot be initialized.");
+    // No lanzamos error para evitar el 'Uncaught Error' que rompe la pantalla, devolvemos null silenciosamente para el UI
+    return null;
+  }
+
   try {
-    // Inicializar la IA justo antes de usarla para asegurar que la API_KEY inyectada esté disponible
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // La instancia se crea SOLO aquí y SOLO si hay una clave válida
+    // Fix: Using the named parameter apiKey for initialization
+    const ai = new GoogleGenAI({ apiKey });
     
     const prompt = `Actúa como un experto en Lean Manufacturing y programación de plegado CNC.
     OBJETIVO: Optimizar la carga de máquinas cumpliendo estrictamente con las capacidades técnicas.
@@ -25,12 +35,13 @@ export const optimizeProductionSchedule = async (
     1. COMPATIBILIDAD DE ESPESOR: Para cada pedido, consulta el espesor en la tabla de ASOCIACIÓN ESPESOR-HERRAMENTAL. Si el espesor no existe o no tiene herramentales recomendados ('recommendedToolIds'), el pedido es INVIABLE.
     2. COMPATIBILIDAD DE MÁQUINA-HERRAMIENTA: Un pedido solo puede ir a una máquina si la máquina tiene los herramentales requeridos en su lista 'compatibleToolIds'. Debes cruzar 'recommendedToolIds' del espesor con 'compatibleToolIds' de la máquina.
     3. CAPACIDAD FÍSICA: El 'length' del pedido no debe superar el 'maxLength' de la máquina.
-    4. VALIDACIÓN ESTRICTA: Si un pedido no cumple las reglas 1, 2 o 3, NO lo incluyas en 'plan'. Inclúyelo en 'unschedulable' con una razón técnica detallada (ej: "El espesor 6mm requiere matriz V50 no asociada a la PL-01").
+    4. VALIDACIÓN ESTRICTA: Si un pedido no cumple las reglas 1, 2 o 3, NO lo incluyas en 'plan'. Inclúyelo en 'unschedulable' con una razón técnica detallada.
     5. OPTIMIZACIÓN: Agrupa por espesor y herramientas en la misma máquina para minimizar setups. Prioriza por 'priority' y 'deliveryDate'.`;
 
+    // Fix: Passing string prompt directly to contents as recommended in the SDK guidelines
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -67,6 +78,7 @@ export const optimizeProductionSchedule = async (
       }
     });
 
+    // Fix: Accessing text as a property of GenerateContentResponse, not as a method call.
     const text = response.text;
     if (!text) return null;
     return JSON.parse(text);
