@@ -52,15 +52,16 @@ export interface Batch {
   toolIds: string[];
   
   useCraneTurn: boolean;
-  turnQuantity: number; // Nueva cantidad de volteos
+  turnQuantity: number;
   useCraneRotate: boolean;
-  rotateQuantity: number; // Nueva cantidad de giros
+  rotateQuantity: number;
   
   requiresToolChange: boolean;
   totalTime: number;
   scheduledDate: string;
   notes: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  isSimulation?: boolean; // Campo para identificar cargas de validación manual
 }
 
 export interface TimeRecord {
