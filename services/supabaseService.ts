@@ -4,16 +4,16 @@ import { MachineConfig, Batch, TimeRecord, Tool, Thickness } from '../types';
 
 let supabase: any = null;
 let isCloudAvailable = false;
-let lastError: string | null = null;
 
 export const initSupabase = (url: string, key: string) => {
   if (url && url.startsWith('https://') && key && key.length > 20) {
     try {
       supabase = createClient(url, key);
       isCloudAvailable = true;
+      console.log("Supabase inicializado correctamente.");
       return true;
     } catch (e) {
-      lastError = "Fallo crítico inicialización";
+      console.error("Error inicializando Supabase:", e);
     }
   }
   return false;
@@ -31,7 +31,7 @@ export const fetchTools = async (): Promise<Tool[]> => {
   const client = getClient();
   if (!client) return [];
   const { data, error } = await client.from('tools').select('*');
-  if (error) return [];
+  if (error) { console.error("Error fetchTools:", error); return []; }
   return data.map((t: any) => ({
     id: t.id, name: t.name, type: t.type, vWidth: t.v_width, angle: t.angle,
     maxTons: t.max_tons, length: t.length, compatibleMachineIds: t.compatible_machine_ids || []
@@ -41,24 +41,25 @@ export const fetchTools = async (): Promise<Tool[]> => {
 export const saveTool = async (tool: Tool) => {
   const client = getClient();
   if (!client) return;
-  const payload = {
+  const { error } = await client.from('tools').upsert({
     id: tool.id, name: tool.name, type: tool.type, v_width: tool.vWidth, angle: tool.angle,
     max_tons: tool.maxTons, length: tool.length, compatible_machine_ids: tool.compatibleMachineIds
-  };
-  await client.from('tools').upsert(payload);
+  });
+  if (error) console.error("Error saveTool:", error);
 };
 
 export const deleteTool = async (id: string) => {
   const client = getClient();
   if (!client) return;
-  await client.from('tools').delete().eq('id', id);
+  const { error } = await client.from('tools').delete().eq('id', id);
+  if (error) console.error("Error deleteTool:", error);
 };
 
 export const fetchThicknesses = async (): Promise<Thickness[]> => {
   const client = getClient();
   if (!client) return [];
   const { data, error } = await client.from('thicknesses').select('*');
-  if (error) return [];
+  if (error) { console.error("Error fetchThicknesses:", error); return []; }
   return data.map((t: any) => ({
     id: t.id, value: t.value, material: t.material, recommendedToolIds: t.recommended_tool_ids || []
   }));
@@ -67,22 +68,24 @@ export const fetchThicknesses = async (): Promise<Thickness[]> => {
 export const saveThickness = async (th: Thickness) => {
   const client = getClient();
   if (!client) return;
-  const payload = {
+  const { error } = await client.from('thicknesses').upsert({
     id: th.id, value: th.value, material: th.material, recommended_tool_ids: th.recommendedToolIds
-  };
-  await client.from('thicknesses').upsert(payload);
+  });
+  if (error) console.error("Error saveThickness:", error);
 };
 
 export const deleteThickness = async (id: string) => {
   const client = getClient();
   if (!client) return;
-  await client.from('thicknesses').delete().eq('id', id);
+  const { error } = await client.from('thicknesses').delete().eq('id', id);
+  if (error) console.error("Error deleteThickness:", error);
 };
 
 export const fetchMachines = async (): Promise<MachineConfig[]> => {
   const client = getClient();
   if (!client) return [];
-  const { data } = await client.from('machines').select('*');
+  const { data, error } = await client.from('machines').select('*');
+  if (error) { console.error("Error fetchMachines:", error); return []; }
   return (data || []).map((m: any) => ({
     id: m.id, name: m.name, description: m.description,
     strikeTime: m.strike_time, toolChangeTime: m.tool_change_time,
@@ -98,7 +101,8 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
 export const fetchBatches = async (): Promise<Batch[]> => {
   const client = getClient();
   if (!client) return [];
-  const { data } = await client.from('batches').select('*');
+  const { data, error } = await client.from('batches').select('*');
+  if (error) { console.error("Error fetchBatches:", error); return []; }
   return (data || []).map((b: any) => ({
     ...b,
     machineId: b.machine_id, strikesPerPiece: b.strikes_per_piece,
@@ -124,7 +128,8 @@ export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) =
       efficiency: m.efficiency, productive_hours: m.productiveHours,
       max_length: m.maxLength, max_tons: m.maxTons, compatible_tool_ids: m.compatibleToolIds
     }));
-    await client.from('machines').upsert(mPayload);
+    const { error } = await client.from('machines').upsert(mPayload);
+    if (error) console.error("Error syncing machines:", error);
   }
 
   if (batches.length) {
@@ -137,20 +142,25 @@ export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) =
       use_crane_rotate: b.useCraneRotate, rotate_quantity: b.rotateQuantity,
       tool_ids: b.toolIds, requires_tool_change: b.requiresToolChange
     }));
-    await client.from('batches').upsert(bPayload);
+    const { error } = await client.from('batches').upsert(bPayload);
+    if (error) console.error("Error syncing batches:", error);
   }
 };
 
 export const deleteBatchFromCloud = async (id: string) => {
   const client = getClient();
-  if (client) await client.from('batches').delete().eq('id', id);
+  if (client) {
+    const { error } = await client.from('batches').delete().eq('id', id);
+    if (error) console.error("Error deleteBatch:", error);
+  }
 };
 
 export const saveTimeRecord = async (record: TimeRecord) => {
   const client = getClient();
   if (!client) return;
-  await client.from('time_records').insert([{
+  const { error } = await client.from('time_records').insert([{
     id: record.id, machine_id: record.machineId, parameter: record.parameter,
     value: record.value, timestamp: record.timestamp
   }]);
+  if (error) console.error("Error saveTimeRecord:", error);
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_MACHINES } from './constants';
 import { MachineConfig, Batch, Tool, Thickness, TimeRecord } from './types';
@@ -14,6 +13,115 @@ const LOGO_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co/storage/v1/object/pub
 
 type TabType = 'schedule' | 'machines' | 'tools' | 'thickness' | 'import';
 
+// --- COMPONENTES AUXILIARES (DEFINIDOS ANTES PARA EVITAR ERRORES DE REFERENCIA) ---
+
+function Stopwatch({ machines, onRecordSave }: { machines: MachineConfig[], onRecordSave: (msg: string) => void }) {
+  const [activeMachine, setActiveMachine] = useState<string>('');
+  const [activeParam, setActiveParam] = useState<keyof MachineConfig>('strikeTime');
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const timerRef = useRef<any>(null);
+
+  const start = () => { if (!isRunning) { setIsRunning(true); timerRef.current = setInterval(() => setTime(t => t + 1), 1000); } };
+  const stop = () => { setIsRunning(false); if (timerRef.current) clearInterval(timerRef.current); };
+  const reset = () => { stop(); setTime(0); };
+
+  const handleSave = async () => {
+    if (!activeMachine || time === 0) return;
+    const record: TimeRecord = { id: `tr-${Date.now()}`, machineId: activeMachine, parameter: activeParam, value: time / 60, timestamp: new Date().toISOString() };
+    await saveTimeRecord(record);
+    onRecordSave(`Estudio guardado: ${activeMachine}`);
+    reset();
+  };
+
+  return (
+    <div className="flex items-center gap-4 bg-slate-900 px-4 py-2 rounded-2xl border border-slate-700 shadow-xl">
+      <div className="flex flex-col">
+        <select className="bg-transparent text-white text-[9px] font-black uppercase outline-none" value={activeMachine} onChange={(e) => setActiveMachine(e.target.value)}>
+          <option value="" className="bg-slate-900 text-white">Máquina</option>
+          {machines.map(m => <option key={m.id} value={m.id} className="bg-slate-900 text-white">{m.id}</option>)}
+        </select>
+        <select className="bg-transparent text-slate-400 text-[8px] font-black uppercase outline-none" value={activeParam} onChange={(e) => setActiveParam(e.target.value as any)}>
+          <option value="strikeTime" className="bg-slate-900 text-white">Golpe</option>
+          <option value="setupTime" className="bg-slate-900 text-white">Setup</option>
+          <option value="toolChangeTime" className="bg-slate-900 text-white">Cruce Herr.</option>
+        </select>
+      </div>
+      <div className="text-blue-400 font-mono text-xl font-black w-20 text-center tracking-tighter">
+        {Math.floor(time / 60)}:{(time % 60).toString().padStart(2, '0')}
+      </div>
+      <div className="flex gap-2">
+        {!isRunning ? (
+          <button onClick={start} className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/40 transition-all">▶</button>
+        ) : (
+          <button onClick={stop} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/40 transition-all">■</button>
+        )}
+        <button onClick={handleSave} className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/40 transition-all">💾</button>
+      </div>
+    </div>
+  );
+}
+
+// Fix: Used React.FC to properly type MachineProductionCard and ensure 'key' prop is accepted correctly by the TS compiler
+const MachineProductionCard: React.FC<{ 
+  machine: MachineConfig; 
+  batches: Batch[]; 
+  onEditBatch: (b: Batch) => void; 
+  onDeleteBatch: (id: string) => void; 
+}> = ({ machine, batches, onEditBatch, onDeleteBatch }) => {
+  const machineBatches = batches
+    .filter(b => b.machineId === machine.id)
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+
+  const totalMinutes = machineBatches.reduce((acc, b) => acc + (b.totalTime || 0), 0);
+  const capacityMinutes = (machine.productiveHours || 16) * 60;
+  const occupancy = Math.min(100, (totalMinutes / capacityMinutes) * 100);
+
+  return (
+    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px] hover:shadow-lg transition-all group">
+      <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex justify-between items-start mb-3">
+          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{machine.id}</h3>
+          <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${occupancy > 90 ? 'bg-red-500 text-white' : occupancy > 70 ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'}`}>
+            {occupancy.toFixed(0)}%
+          </span>
+        </div>
+        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-blue-600 h-full transition-all duration-1000" style={{ width: `${occupancy}%` }} />
+        </div>
+        <div className="flex justify-between mt-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+          <span>{formatTime(totalMinutes)}</span>
+          <span>{machine.productiveHours}HS Capacidad</span>
+        </div>
+      </div>
+
+      <div className="flex-1 p-4 space-y-3 overflow-y-auto scrollbar-hide">
+        {machineBatches.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Sin carga programada</div>
+        ) : (
+          machineBatches.map(batch => (
+            <div key={batch.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-blue-200 hover:shadow-md transition-all relative group/item">
+              <div className="flex justify-between mb-1">
+                <span className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[140px]">{batch.name}</span>
+                <span className="text-[9px] font-black text-blue-600">{formatTime(batch.totalTime)}</span>
+              </div>
+              <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase">
+                <span>{batch.pieces} Pzs • {batch.thickness}mm</span>
+              </div>
+              <div className="mt-3 flex gap-2 opacity-0 group-hover/item:opacity-100 transition-all">
+                <button onClick={() => onEditBatch(batch)} className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-1 rounded-lg">Editar</button>
+                <button onClick={() => { if(confirm('¿Eliminar lote?')) onDeleteBatch(batch.id); }} className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-lg">Borrar</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('schedule');
   const [machines, setMachines] = useState<MachineConfig[]>([]);
@@ -24,14 +132,12 @@ export default function App() {
   const [isEditing, setIsEditing] = useState<{ type: string, data: any } | null>(null);
   const [iaWarnings, setIaWarnings] = useState<{batch_id: string, reason: string}[] | null>(null);
 
-  // Inicialización y Realtime
   useEffect(() => {
     const SUPABASE_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co"; 
     const SUPABASE_KEY = "sb_publishable_w5tryB0lyl0hCNP3B9AAUg_udm3kUu0"; 
     initSupabase(SUPABASE_URL, SUPABASE_KEY);
     loadData();
 
-    // Suscripciones Realtime para actualización instantánea
     const subBatches = subscribeToChanges('batches', () => loadData());
     const subTools = subscribeToChanges('tools', () => loadData());
     const subMachines = subscribeToChanges('machines', () => loadData());
@@ -46,13 +152,17 @@ export default function App() {
   }, []);
 
   const loadData = async () => {
-    const [m, b, t, th] = await Promise.all([
-      fetchMachines(), fetchBatches(), fetchTools(), fetchThicknesses()
-    ]);
-    setMachines(m.length ? m : INITIAL_MACHINES);
-    setBatches(b);
-    setTools(t);
-    setThicknesses(th);
+    try {
+      const [m, b, t, th] = await Promise.all([
+        fetchMachines(), fetchBatches(), fetchTools(), fetchThicknesses()
+      ]);
+      setMachines(m.length ? m : INITIAL_MACHINES);
+      setBatches(b);
+      setTools(t);
+      setThicknesses(th);
+    } catch (e) {
+      console.error("Error cargando datos:", e);
+    }
   };
 
   const handleSync = async () => {
@@ -60,6 +170,7 @@ export default function App() {
     await syncAppData(machines, batches);
     setStatus("Sincronizado");
     setTimeout(() => setStatus(""), 2000);
+    loadData();
   };
 
   const runIA = async () => {
@@ -75,6 +186,7 @@ export default function App() {
       setBatches(updated);
       await syncAppData(machines, updated);
       setStatus("Optimizado con IA");
+      loadData();
     }
   };
 
@@ -126,27 +238,16 @@ export default function App() {
         {activeTab === 'schedule' && (
           <div className="space-y-8">
             <div className="flex justify-between items-center">
-               <h2 className="text-2xl font-black text-slate-900 uppercase">Carga de Planta</h2>
+               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Carga de Planta</h2>
                <div className="flex gap-4">
-                 <button onClick={() => setIsEditing({ type: 'batch', data: { id: `b-${Date.now()}`, name: '', machineId: machines[0]?.id, pieces: 10, strikesPerPiece: 4, thickness: 1.5, length: 500, width: 200, deliveryDate: new Date().toISOString().split('T')[0], toolIds: [], useCraneTurn: false, turnQuantity: 1, useCraneRotate: false, rotateQuantity: 1, requiresToolChange: true, totalTime: 0, scheduledDate: new Date().toISOString().split('T')[0], notes: '', priority: 'medium', trams: 1, toolChanges: 1 } })} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">+ Cargar Lote</button>
+                 <button onClick={() => setIsEditing({ type: 'batch', data: { id: `b-${Date.now()}`, name: '', machineId: machines[0]?.id || 'PL-01', pieces: 10, strikesPerPiece: 4, thickness: 1.5, length: 500, width: 200, deliveryDate: new Date().toISOString().split('T')[0], toolIds: [], useCraneTurn: false, turnQuantity: 1, useCraneRotate: false, rotateQuantity: 1, requiresToolChange: true, totalTime: 0, scheduledDate: new Date().toISOString().split('T')[0], notes: '', priority: 'medium', trams: 1, toolChanges: 1 } })} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">+ Cargar Lote</button>
                  <button onClick={runIA} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all">Optimizar con IA</button>
                </div>
             </div>
 
-            {iaWarnings && (
-              <div className="bg-red-50 border-2 border-red-200 p-6 rounded-[32px]">
-                <h3 className="text-red-900 font-black uppercase text-sm mb-4">Avisos Técnicos IA</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {iaWarnings.map((w, i) => <div key={i} className="bg-white p-3 rounded-xl border border-red-100 text-[9px] text-red-600 font-bold uppercase leading-tight">{w.reason}</div>)}
-                </div>
-                <button onClick={() => setIaWarnings(null)} className="mt-4 text-[9px] font-black text-red-400 uppercase">Cerrar</button>
-              </div>
-            )}
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-              {machines.map(m => (
-                // Fix: Wrapped onDeleteBatch call to ensure it returns void and matches component prop type
-                <MachineProductionCard key={m.id} machine={m} batches={batches} onEditBatch={(b:any) => setIsEditing({ type: 'batch', data: b })} onDeleteBatch={(id:string) => { deleteBatchFromCloud(id); }} />
+              {machines.map((m: MachineConfig) => (
+                <MachineProductionCard key={m.id} machine={m} batches={batches} onEditBatch={(b: Batch) => setIsEditing({ type: 'batch', data: b })} onDeleteBatch={(id: string) => { deleteBatchFromCloud(id).then(loadData); }} />
               ))}
             </div>
           </div>
@@ -155,25 +256,22 @@ export default function App() {
         {activeTab === 'machines' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase">Gestión de Máquinas</h2>
-              <button 
-                onClick={() => setIsEditing({ type: 'machine', data: { id: `PL-${Date.now()}`, name: '', description: '', strikeTime: 0.005, toolChangeTime: 5, setupTime: 10, measurementTime: 0.5, tramTime: 3, craneTurnTime: 1, craneRotateTime: 1, manualTurnTime: 0.05, manualRotateTime: 0.05, efficiency: 100, productiveHours: 16, maxLength: 3000, maxTons: 100, compatibleToolIds: [] }})}
-                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
-              >+ Nueva Máquina</button>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Máquinas Individuales</h2>
+              <button onClick={() => setIsEditing({ type: 'machine', data: { id: `PL-${Date.now()}`, name: '', description: '', strikeTime: 0.005, toolChangeTime: 5, setupTime: 10, measurementTime: 0.5, tramTime: 3, craneTurnTime: 1, craneRotateTime: 1, manualTurnTime: 0.05, manualRotateTime: 0.05, efficiency: 100, productiveHours: 16, maxLength: 3000, maxTons: 100, compatibleToolIds: [] }})} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">+ Nueva Máquina</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {machines.map(m => (
-                <div key={m.id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div key={m.id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm flex flex-col justify-between hover:border-blue-300 transition-all">
                   <div>
                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{m.id}</h3>
                     <p className="text-[10px] font-bold text-slate-400 mb-4">{m.name}</p>
                     <div className="space-y-2">
-                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Capacidad:</span> <span className="text-slate-900">{m.maxTons}T / {m.maxLength}mm</span></div>
-                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Eficiencia:</span> <span className="text-blue-600">{m.efficiency}%</span></div>
+                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Tons Max:</span> <span className="text-slate-900">{m.maxTons}T</span></div>
+                      <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Eficiencia:</span> <span className="text-blue-600 font-bold">{m.efficiency}%</span></div>
                       <div className="flex justify-between text-[9px] font-black uppercase"><span className="text-slate-400">Jornada:</span> <span className="text-slate-900">{m.productiveHours}hs</span></div>
                     </div>
                   </div>
-                  <button onClick={() => setIsEditing({ type: 'machine', data: m })} className="mt-6 w-full py-3 bg-slate-50 text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all">Configurar Parámetros</button>
+                  <button onClick={() => setIsEditing({ type: 'machine', data: m })} className="mt-6 w-full py-3 bg-slate-50 text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all">Editar Parámetros Técnicos</button>
                 </div>
               ))}
             </div>
@@ -183,11 +281,8 @@ export default function App() {
         {activeTab === 'tools' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase">Herramental</h2>
-              <button 
-                onClick={() => setIsEditing({ type: 'tool', data: { id: `T-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: [] }})}
-                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
-              >+ Nueva Herramienta</button>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Herramental</h2>
+              <button onClick={() => setIsEditing({ type: 'tool', data: { id: `T-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: [] }})} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest">+ Nueva Herramienta</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {tools.map(t => (
@@ -210,11 +305,8 @@ export default function App() {
         {activeTab === 'thickness' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase">Espesores</h2>
-              <button 
-                onClick={() => setIsEditing({ type: 'thickness', data: { id: `TH-${Date.now()}`, value: 1.5, material: 'SAE 1010', recommendedToolIds: [] }})}
-                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest"
-              >+ Nuevo Espesor</button>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Espesores y Materiales</h2>
+              <button onClick={() => setIsEditing({ type: 'thickness', data: { id: `TH-${Date.now()}`, value: 1.5, material: 'SAE 1010', recommendedToolIds: [] }})} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest">+ Nuevo Espesor</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {thicknesses.map(th => (
@@ -229,8 +321,8 @@ export default function App() {
                       <button onClick={async () => { if(confirm('¿Eliminar espesor?')) { await deleteThickness(th.id); loadData(); }}} className="text-slate-300 hover:text-red-500 text-xl leading-none">&times;</button>
                     </div>
                   </div>
-                  <div className="bg-slate-50 p-4 rounded-2xl">
-                    <span className="text-[8px] font-black text-slate-400 uppercase block mb-2">Herramientas Recomendadas:</span>
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <span className="text-[8px] font-black text-slate-400 uppercase block mb-2">Herramental Recomendado:</span>
                     <div className="flex flex-wrap gap-2">
                       {th.recommendedToolIds && th.recommendedToolIds.length > 0 ? th.recommendedToolIds.map(tid => {
                         const tool = tools.find(t => t.id === tid);
@@ -240,20 +332,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'import' && (
-          <div className="h-full flex items-center justify-center">
-            <div className="bg-white p-12 rounded-[40px] border-2 border-dashed border-slate-200 text-center max-w-xl shadow-sm">
-               <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                 <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-               </div>
-               <h3 className="text-xl font-black text-slate-900 uppercase mb-2">Importar Archivos</h3>
-               <p className="text-slate-500 text-sm mb-8">Carga tu planificación CSV o Excel para sincronizar con planta.</p>
-               <input type="file" className="hidden" id="csv-upload" />
-               <label htmlFor="csv-upload" className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest cursor-pointer hover:scale-105 transition-all inline-block shadow-lg">Seleccionar Archivo</label>
             </div>
           </div>
         )}
@@ -268,12 +346,10 @@ export default function App() {
             </div>
             <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto">
                
-               {/* MODAL MAQUINA EXTENDIDO */}
                {isEditing.type === 'machine' && (
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Básicos y Capacidad</h4>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">ID Plegadora</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.id} disabled={true} /></div>
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Capacidad y Eficiencia</h4>
                       <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre Comercial</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Long. Max (mm)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxLength} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxLength: Number(e.target.value)}})} /></div>
@@ -281,49 +357,45 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Eficiencia %</label><input type="number" className="w-full bg-blue-50 border-2 border-blue-100 p-3 rounded-xl font-bold text-blue-900" value={isEditing.data.efficiency} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, efficiency: Number(e.target.value)}})} /></div>
-                        <div><label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Horas Jornada</label><input type="number" className="w-full bg-blue-50 border-2 border-blue-100 p-3 rounded-xl font-bold text-blue-900" value={isEditing.data.productiveHours} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, productiveHours: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-blue-600 mb-1 block">Hs Jornada</label><input type="number" className="w-full bg-blue-50 border-2 border-blue-100 p-3 rounded-xl font-bold text-blue-900" value={isEditing.data.productiveHours} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, productiveHours: Number(e.target.value)}})} /></div>
                       </div>
                     </section>
-
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Preparación (Setups)</h4>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Puesta a Punto Base (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.setupTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, setupTime: Number(e.target.value)}})} /></div>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Herr. Unitario (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.toolChangeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, toolChangeTime: Number(e.target.value)}})} /></div>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Tramo (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.tramTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, tramTime: Number(e.target.value)}})} /></div>
-                      <div><label className="text-[9px] font-black uppercase text-orange-600 mb-1 block">Medición Técnica (min)</label><input type="number" step="0.1" className="w-full bg-orange-50 border-2 border-orange-100 p-3 rounded-xl font-bold text-orange-900" value={isEditing.data.measurementTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, measurementTime: Number(e.target.value)}})} /></div>
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Tiempos de Setup (min)</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Puesta a Punto Base</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.setupTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, setupTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Herr. Unitario</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.toolChangeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, toolChangeTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cambio Tramo</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.tramTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, tramTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-orange-600 mb-1 block">Medición Técnica</label><input type="number" step="0.1" className="w-full bg-orange-50 border-2 border-orange-100 p-3 rounded-xl font-bold text-orange-900" value={isEditing.data.measurementTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, measurementTime: Number(e.target.value)}})} /></div>
                     </section>
-
                     <section className="space-y-4">
                       <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest border-b pb-2">Operación y Maniobras</h4>
-                      <div><label className="text-[9px] font-black uppercase text-emerald-600 mb-1 block">Tiempo por Golpe (min)</label><input type="number" step="0.001" className="w-full bg-emerald-50 border-2 border-emerald-100 p-3 rounded-xl font-bold text-emerald-900" value={isEditing.data.strikeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, strikeTime: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-emerald-600 mb-1 block">T. Golpe (min)</label><input type="number" step="0.001" className="w-full bg-emerald-50 border-2 border-emerald-100 p-3 rounded-xl font-bold text-emerald-900" value={isEditing.data.strikeTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, strikeTime: Number(e.target.value)}})} /></div>
                       <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Volteo (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneTurnTime: Number(e.target.value)}})} /></div>
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Giro (min)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneRotateTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Volteo</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneTurnTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Grúa Giro</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.craneRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, craneRotateTime: Number(e.target.value)}})} /></div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Volteo (min)</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualTurnTime: Number(e.target.value)}})} /></div>
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Giro (min)</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualRotateTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Volteo</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualTurnTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualTurnTime: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Manual Giro</label><input type="number" step="0.01" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.manualRotateTime} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, manualRotateTime: Number(e.target.value)}})} /></div>
                       </div>
                     </section>
                  </div>
                )}
 
-               {/* MODAL LOTE */}
                {isEditing.type === 'batch' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <section className="space-y-4">
                       <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Información del Lote</h4>
                       <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre/Código</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
                       <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Cant. Piezas</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.pieces} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, pieces: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Piezas</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.pieces} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, pieces: Number(e.target.value)}})} /></div>
                         <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Golpes/Pza</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.strikesPerPiece} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, strikesPerPiece: Number(e.target.value)}})} /></div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Espesor (mm)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.thickness} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, thickness: Number(e.target.value)}})} /></div>
-                        <div>
-                          <label className={`text-[9px] font-black uppercase mb-1 block ${!isEditing.data.requiresToolChange ? 'text-slate-300' : 'text-slate-400'}`}>Tramos</label>
-                          <input type="number" disabled={!isEditing.data.requiresToolChange} className={`w-full border-2 p-3 rounded-xl font-bold ${!isEditing.data.requiresToolChange ? 'bg-slate-100 text-slate-300' : 'bg-slate-50'}`} value={isEditing.data.trams} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, trams: Number(e.target.value)}})} />
-                        </div>
+                      <div>
+                        <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Plegadora Destino</label>
+                        <select className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold uppercase" value={isEditing.data.machineId} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, machineId: e.target.value}})}>
+                          {machines.map(m => <option key={m.id} value={m.id}>{m.id} - {m.name}</option>)}
+                        </select>
                       </div>
                     </section>
                     <section className="space-y-4">
@@ -331,36 +403,34 @@ export default function App() {
                       <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                         <label className="flex items-center gap-3 cursor-pointer">
                           <input type="checkbox" className="w-5 h-5 rounded text-blue-600" checked={isEditing.data.requiresToolChange} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, requiresToolChange: e.target.checked}})} />
-                          <span className="text-[10px] font-black uppercase">Cambio de Herramental</span>
+                          <span className="text-[10px] font-black uppercase">Cambio Herramental</span>
                         </label>
-                        {isEditing.data.requiresToolChange && <input type="number" className="w-16 bg-white border-2 border-slate-200 p-1 rounded-xl font-bold text-center" value={isEditing.data.toolChanges} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, toolChanges: Number(e.target.value)}})} />}
                       </div>
                       <div className="space-y-3">
-                        <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100">
-                          <label className="flex items-center gap-3 cursor-pointer mb-2">
+                        <div className="p-4 bg-emerald-50/30 rounded-2xl border border-emerald-100 flex items-center justify-between">
+                          <label className="flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" className="w-5 h-5 rounded text-emerald-600" checked={isEditing.data.useCraneTurn} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneTurn: e.target.checked}})} />
-                            <span className="text-[10px] font-black uppercase text-emerald-800">Volteo Puente Grúa</span>
+                            <span className="text-[10px] font-black uppercase text-emerald-800">Volteo Grúa</span>
                           </label>
-                          {isEditing.data.useCraneTurn && <input type="number" className="w-full bg-white border-2 border-emerald-100 p-2 rounded-xl font-bold" value={isEditing.data.turnQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: Number(e.target.value)}})} />}
+                          {isEditing.data.useCraneTurn && <input type="number" className="w-16 bg-white border-2 border-emerald-100 p-2 rounded-xl font-bold text-center" value={isEditing.data.turnQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: Number(e.target.value)}})} />}
                         </div>
-                        <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100">
-                          <label className="flex items-center gap-3 cursor-pointer mb-2">
+                        <div className="p-4 bg-blue-50/30 rounded-2xl border border-blue-100 flex items-center justify-between">
+                          <label className="flex items-center gap-3 cursor-pointer">
                             <input type="checkbox" className="w-5 h-5 rounded text-blue-600" checked={isEditing.data.useCraneRotate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneRotate: e.target.checked}})} />
-                            <span className="text-[10px] font-black uppercase text-blue-800">Giro Puente Grúa</span>
+                            <span className="text-[10px] font-black uppercase text-blue-800">Giro Grúa</span>
                           </label>
-                          {isEditing.data.useCraneRotate && <input type="number" className="w-full bg-white border-2 border-blue-100 p-2 rounded-xl font-bold" value={isEditing.data.rotateQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: Number(e.target.value)}})} />}
+                          {isEditing.data.useCraneRotate && <input type="number" className="w-16 bg-white border-2 border-blue-100 p-2 rounded-xl font-bold text-center" value={isEditing.data.rotateQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: Number(e.target.value)}})} />}
                         </div>
                       </div>
                     </section>
                  </div>
                )}
 
-               {/* MODAL HERRAMIENTA */}
                {isEditing.type === 'tool' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Datos Técnicos</h4>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre/Identificación</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Identificación</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Nombre</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} /></div>
                       <div>
                         <label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Tipo</label>
                         <div className="flex gap-2">
@@ -370,35 +440,34 @@ export default function App() {
                       </div>
                     </section>
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Especificaciones</h4>
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Specs Técnicas</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Ángulo (°)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.angle} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, angle: Number(e.target.value)}})} /></div>
-                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Longitud (mm)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} /></div>
+                        <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Largo (mm)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} /></div>
                       </div>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Carga Max (Tons/m)</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxTons} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxTons: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Tons/m Máx</label><input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.maxTons} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxTons: Number(e.target.value)}})} /></div>
                     </section>
                  </div>
                )}
 
-               {/* MODAL ESPESOR */}
                {isEditing.type === 'thickness' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Configuración Material</h4>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Valor Espesor (mm)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.value} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, value: Number(e.target.value)}})} /></div>
-                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Material (ej: SAE 1010)</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.material} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, material: e.target.value}})} /></div>
+                      <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b pb-2">Material</h4>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Espesor (mm)</label><input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.value} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, value: Number(e.target.value)}})} /></div>
+                      <div><label className="text-[9px] font-black uppercase text-slate-400 mb-1 block">Material</label><input className="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold" value={isEditing.data.material} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, material: e.target.value}})} /></div>
                     </section>
                     <section className="space-y-4">
-                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Herramental Asociado</h4>
-                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2">
+                      <h4 className="text-[10px] font-black text-orange-600 uppercase tracking-widest border-b pb-2">Cruce de Herramental</h4>
+                      <div className="grid grid-cols-1 gap-2 max-h-[250px] overflow-y-auto pr-2 scrollbar-hide">
                         {tools.map(t => (
-                          <label key={t.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all">
-                            <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={isEditing.data.recommendedToolIds?.includes(t.id)} onChange={e => {
+                          <label key={t.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-all ${isEditing.data.recommendedToolIds?.includes(t.id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-700 border-slate-100 hover:bg-slate-100'}`}>
+                            <input type="checkbox" className="hidden" checked={isEditing.data.recommendedToolIds?.includes(t.id)} onChange={e => {
                               const ids = isEditing.data.recommendedToolIds || [];
                               const newIds = e.target.checked ? [...ids, t.id] : ids.filter((id:string) => id !== t.id);
                               setIsEditing({...isEditing, data: {...isEditing.data, recommendedToolIds: newIds}});
                             }} />
-                            <span className="text-[10px] font-black uppercase text-slate-700">{t.name} <span className="text-[8px] text-slate-400 ml-2">({t.type === 'punch' ? 'Punzon' : 'Matriz'})</span></span>
+                            <span className="text-[10px] font-black uppercase">{t.name} <span className="text-[8px] opacity-70 ml-2">({t.type === 'punch' ? 'Punzon' : 'Matriz'})</span></span>
                           </label>
                         ))}
                       </div>
@@ -416,114 +485,14 @@ export default function App() {
                  else if (isEditing.type === 'thickness') await saveThickness(isEditing.data);
                  
                  setIsEditing(null);
-                 loadData();
                  setStatus("Cambios Guardados");
+                 loadData();
                  setTimeout(() => setStatus(""), 2000);
                }} className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-all">Confirmar Cambios</button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Stopwatch({ machines, onRecordSave }: { machines: MachineConfig[], onRecordSave: (msg: string) => void }) {
-  const [activeMachine, setActiveMachine] = useState<string>('');
-  const [activeParam, setActiveParam] = useState<keyof MachineConfig>('strikeTime');
-  const [time, setTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const timerRef = useRef<any>(null);
-
-  const start = () => { if (!isRunning) { setIsRunning(true); timerRef.current = setInterval(() => setTime(t => t + 1), 1000); } };
-  const stop = () => { setIsRunning(false); if (timerRef.current) clearInterval(timerRef.current); };
-  const reset = () => { stop(); setTime(0); };
-
-  const handleSave = async () => {
-    if (!activeMachine || time === 0) return;
-    const record: TimeRecord = { id: `tr-${Date.now()}`, machineId: activeMachine, parameter: activeParam, value: time / 60, timestamp: new Date().toISOString() };
-    await saveTimeRecord(record);
-    onRecordSave(`Estudio guardado: ${activeMachine}`);
-    reset();
-  };
-
-  return (
-    <div className="flex items-center gap-4 bg-slate-900 px-4 py-2 rounded-2xl border border-slate-700 shadow-xl">
-      <div className="flex flex-col">
-        <select className="bg-transparent text-white text-[9px] font-black uppercase outline-none" value={activeMachine} onChange={(e) => setActiveMachine(e.target.value)}>
-          <option value="" className="bg-slate-900">Plegadora</option>
-          {machines.map(m => <option key={m.id} value={m.id} className="bg-slate-900">{m.id}</option>)}
-        </select>
-        <select className="bg-transparent text-slate-400 text-[8px] font-black uppercase outline-none" value={activeParam} onChange={(e) => setActiveParam(e.target.value as any)}>
-          <option value="strikeTime" className="bg-slate-900">Golpe</option>
-          <option value="setupTime" className="bg-slate-900">Puesta Punto</option>
-          <option value="toolChangeTime" className="bg-slate-900">Cambio Herr.</option>
-        </select>
-      </div>
-      <div className="text-blue-400 font-mono text-xl font-black w-20 text-center tracking-tighter">
-        {Math.floor(time / 60)}:{(time % 60).toString().padStart(2, '0')}
-      </div>
-      <div className="flex gap-2">
-        {!isRunning ? (
-          <button onClick={start} className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/40 transition-all">▶</button>
-        ) : (
-          <button onClick={stop} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/40 transition-all">■</button>
-        )}
-        <button onClick={handleSave} className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/40 transition-all">💾</button>
-      </div>
-    </div>
-  );
-}
-
-// Fix: Updated prop types to allow Promise or void return for onDeleteBatch and onEditBatch to resolve TS mismatch errors
-function MachineProductionCard({ machine, batches, onEditBatch, onDeleteBatch }: { machine: MachineConfig, batches: Batch[], onEditBatch: (b: Batch) => void | Promise<any>, onDeleteBatch: (id: string) => void | Promise<any> }) {
-  const machineBatches = batches
-    .filter(b => b.machineId === machine.id)
-    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
-
-  const totalMinutes = machineBatches.reduce((acc, b) => acc + (b.totalTime || 0), 0);
-  const capacityMinutes = (machine.productiveHours || 16) * 60;
-  const occupancy = Math.min(100, (totalMinutes / capacityMinutes) * 100);
-
-  return (
-    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px] hover:shadow-lg transition-all group">
-      <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-        <div className="flex justify-between items-start mb-3">
-          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">{machine.id}</h3>
-          <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${occupancy > 90 ? 'bg-red-500 text-white' : occupancy > 70 ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'}`}>
-            {occupancy.toFixed(0)}%
-          </span>
-        </div>
-        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-          <div className="bg-blue-600 h-full transition-all duration-1000" style={{ width: `${occupancy}%` }} />
-        </div>
-        <div className="flex justify-between mt-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-          <span>{formatTime(totalMinutes)}</span>
-          <span>{machine.productiveHours}HS Capacidad</span>
-        </div>
-      </div>
-
-      <div className="flex-1 p-4 space-y-3 overflow-y-auto scrollbar-hide">
-        {machineBatches.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Sin carga programada</div>
-        ) : (
-          machineBatches.map(batch => (
-            <div key={batch.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-blue-200 hover:shadow-md transition-all relative group/item">
-              <div className="flex justify-between mb-1">
-                <span className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[140px]">{batch.name}</span>
-                <span className="text-[9px] font-black text-blue-600">{formatTime(batch.totalTime)}</span>
-              </div>
-              <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase">
-                <span>{batch.pieces} Pzs • {batch.thickness}mm</span>
-              </div>
-              <div className="mt-3 flex gap-2 opacity-0 group-hover/item:opacity-100 transition-all">
-                <button onClick={() => onEditBatch(batch)} className="text-[9px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-1 rounded-lg">Editar</button>
-                <button onClick={() => { if(confirm('¿Eliminar lote?')) onDeleteBatch(batch.id); }} className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded-lg">Borrar</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 }
