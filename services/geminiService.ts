@@ -8,15 +8,15 @@ export const optimizeProductionSchedule = async (
   tools: Tool[],
   thicknesses: Thickness[]
 ) => {
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey || apiKey === "") {
+  // Ensure the API key is available
+  if (!process.env.API_KEY || process.env.API_KEY === "") {
     console.error("CRITICAL ERROR: process.env.API_KEY is missing or empty.");
     return null;
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    // Correct initialization: always use { apiKey: process.env.API_KEY } directly
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const prompt = `Actúa como un experto en Lean Manufacturing y programación de plegado CNC.
     OBJETIVO: Optimizar la carga de máquinas.
@@ -73,6 +73,7 @@ export const optimizeProductionSchedule = async (
             }
           }
         },
+        // Thinking budget config for enhanced reasoning in complex scheduling tasks
         thinkingConfig: { thinkingBudget: 4000 }
       }
     });

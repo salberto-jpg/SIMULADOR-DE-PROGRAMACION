@@ -1,5 +1,7 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { MachineConfig, Batch, TimeRecord, Tool, Thickness } from '../types';
+import { INITIAL_MACHINES } from '../constants';
 
 let supabase: any = null;
 let isCloudAvailable = false;
@@ -47,6 +49,7 @@ const mapBatchToDB = (b: Batch) => {
     priority: b.priority,
     deliveryDate: b.deliveryDate,
     isSimulation: isSim,
+    imageUrl: b.imageUrl, // Se incluye la imagen
     originalNotes: b.notes || ''
   };
 
@@ -57,7 +60,7 @@ const mapBatchToDB = (b: Batch) => {
     pieces: Number(b.pieces) || 0,
     strikes_per_piece: Number(b.strikesPerPiece) || 0, 
     total_time: Number(b.totalTime) || 0, 
-    // Fix: Using scheduledDate from the Batch interface instead of scheduled_date
+    // Fix: Using scheduledDate from Batch interface instead of non-existent scheduled_date
     scheduled_date: b.scheduledDate || new Date().toISOString().split('T')[0], 
     notes: JSON.stringify(extendedData)
   };
@@ -90,7 +93,7 @@ export const saveTool = async (tool: Tool) => {
   if (!client) return;
   await client.from('tools').upsert({
     id: tool.id, name: tool.name, type: tool.type, v_width: tool.vWidth, angle: tool.angle,
-    max_tons: tool.maxTons, length: tool.length, compatible_machine_ids: tool.compatibleMachineIds
+    max__tons: tool.maxTons, length: tool.length, compatible_machine_ids: tool.compatibleMachineIds
   });
 };
 
@@ -109,8 +112,9 @@ export const fetchThicknesses = async (): Promise<Thickness[]> => {
     id: t.id, 
     value: t.value, 
     material: t.material, 
-    recommended_tool_ids: t.recommended_tool_ids || [],
-    compatible_machine_ids: t.compatible_machine_ids || []
+    // Fix: Mapping database snake_case fields to camelCase interface properties
+    recommendedToolIds: t.recommended_tool_ids || [],
+    compatibleMachineIds: t.compatible_machine_ids || []
   }));
 };
 
@@ -139,36 +143,25 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
   if (error) return [];
   
   return (data || []).map((m: any) => {
-    let techData = {
-      description: m.description || '',
-      strikeTime: 0.005,
-      toolChangeTime: 5,
-      setupTime: 10,
-      measurementTime: 0.5,
-      tramTime: 3,
-      craneTurnTime: 1,
-      craneRotateTime: 1,
-      manualTurnTime: 0.05,
-      manualRotateTime: 0.05,
-      efficiency: 100,
-      productiveHours: 16,
-      maxLength: 2500,
-      maxTons: 60,
-      compatibleToolIds: []
-    };
+    const defaultConfig = INITIAL_MACHINES.find(im => im.id === m.id) || INITIAL_MACHINES[0];
+
+    let techData: Partial<MachineConfig> = { ...defaultConfig };
 
     try {
       if (m.description && m.description.startsWith('{')) {
         const parsed = JSON.parse(m.description);
         techData = { ...techData, ...parsed };
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`Error parsing description for machine ${m.id}, using defaults.`);
+    }
 
     return {
+      ...defaultConfig,
+      ...techData,
       id: m.id,
-      name: m.name || '',
-      ...techData
-    };
+      name: m.name || defaultConfig.name,
+    } as MachineConfig;
   });
 };
 
@@ -176,22 +169,23 @@ export const saveMachine = async (m: MachineConfig) => {
   const client = getClient();
   if (!client) throw new Error("Cloud no disponible");
 
+  // Usamos el operador ?? para permitir el valor 0
   const techData = {
     description: m.description || '',
-    strikeTime: Number(m.strikeTime) || 0.005,
-    toolChangeTime: Number(m.toolChangeTime) || 5,
-    setupTime: Number(m.setupTime) || 10,
-    measurementTime: Number(m.measurementTime) || 0.5,
-    tramTime: Number(m.tramTime) || 3,
-    craneTurnTime: Number(m.craneTurnTime) || 1,
-    craneRotateTime: Number(m.craneRotateTime) || 1,
-    manualTurnTime: Number(m.manualTurnTime) || 0.05,
-    manualRotateTime: Number(m.manualRotateTime) || 0.05,
-    efficiency: Number(m.efficiency) || 100,
-    productiveHours: Number(m.productiveHours) || 8,
-    maxLength: Number(m.maxLength) || 3000,
-    maxTons: Number(m.maxTons) || 100,
-    compatibleToolIds: m.compatibleToolIds || []
+    strikeTime: m.strikeTime ?? 0.005,
+    toolChangeTime: m.toolChangeTime ?? 5,
+    setupTime: m.setupTime ?? 10,
+    measurementTime: m.measurementTime ?? 0.5,
+    tramTime: m.tramTime ?? 3,
+    craneTurnTime: m.craneTurnTime ?? 1,
+    craneRotateTime: m.craneRotateTime ?? 1,
+    manualTurnTime: m.manualTurnTime ?? 0.05,
+    manualRotateTime: m.manualRotateTime ?? 0.05,
+    efficiency: m.efficiency ?? 100,
+    productiveHours: m.productiveHours ?? 8,
+    maxLength: m.maxLength ?? 3000,
+    maxTons: m.maxTons ?? 100,
+    compatibleToolIds: m.compatibleToolIds ?? []
   };
 
   const { error } = await client.from('machines').upsert({
@@ -227,6 +221,7 @@ export const fetchBatches = async (): Promise<Batch[]> => {
       priority: 'medium',
       deliveryDate: b.scheduled_date,
       isSimulation: b.name.startsWith('[SIM]'),
+      imageUrl: undefined, // Se inicializa
       originalNotes: b.notes || ''
     };
 
@@ -248,6 +243,7 @@ export const fetchBatches = async (): Promise<Batch[]> => {
       totalTime: b.total_time,
       scheduledDate: b.scheduled_date,
       isSimulation: extended.isSimulation,
+      imageUrl: extended.imageUrl, // Se recupera
       trams: extended.trams,
       toolChanges: extended.toolChanges,
       thickness: extended.thickness,

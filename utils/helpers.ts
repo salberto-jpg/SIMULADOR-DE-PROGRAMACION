@@ -3,20 +3,19 @@ import { MachineConfig, Batch } from "../types";
 
 export const formatTime = (totalMinutes: number): string => {
   if (isNaN(totalMinutes) || totalMinutes < 0) return "00:00:00";
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = Math.floor(totalMinutes % 60);
-  const seconds = Math.round((totalMinutes * 60) % 60);
   
-  if (seconds === 60) {
-      return formatTime(totalMinutes + 1/60 - seconds/3600);
-  }
+  const totalSeconds = Math.round(totalMinutes * 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
 export const parseTimeToMinutes = (timeStr: string): number => {
   if (!timeStr) return 0;
-  const parts = timeStr.split(':').map(p => parseInt(p, 10) || 0);
+  // Soporta formatos H:M:S, M:S o solo S
+  const parts = timeStr.split(':').map(p => parseFloat(p) || 0);
   let h = 0, m = 0, s = 0;
   
   if (parts.length === 3) {
@@ -43,15 +42,17 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
     requiresToolChange = false
   } = batch;
 
-  const strike = machine.strikeTime || 0.005;
-  const toolUnit = machine.toolChangeTime || 5;
-  const setupUnit = machine.setupTime || 10;
-  const measureUnit = machine.measurementTime || 0.5;
+  // Se utiliza validación explícita para permitir que el tiempo sea 0
+  const strike = machine.strikeTime !== undefined ? machine.strikeTime : 0.005;
+  const toolUnit = machine.toolChangeTime !== undefined ? machine.toolChangeTime : 5;
+  const setupUnit = machine.setupTime !== undefined ? machine.setupTime : 10;
+  const measureUnit = machine.measurementTime !== undefined ? machine.measurementTime : 0.5;
+  const tramUnit = machine.tramTime !== undefined ? machine.tramTime : 3;
   
-  const manualTurnUnit = machine.manualTurnTime || 0.05;
-  const manualRotateUnit = machine.manualRotateTime || 0.05;
-  const craneTurnUnit = machine.craneTurnTime || 1;
-  const craneRotateUnit = machine.craneRotateTime || 1;
+  const manualTurnUnit = machine.manualTurnTime !== undefined ? machine.manualTurnTime : 0.05;
+  const manualRotateUnit = machine.manualRotateTime !== undefined ? machine.manualRotateTime : 0.05;
+  const craneTurnUnit = machine.craneTurnTime !== undefined ? machine.craneTurnTime : 1;
+  const craneRotateUnit = machine.craneRotateTime !== undefined ? machine.craneRotateTime : 1;
 
   const turnUnit = useCraneTurn ? craneTurnUnit : manualTurnUnit;
   const totalTurnTime = turnUnit * turnQuantity;
@@ -61,7 +62,7 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   
   const totalSetup = requiresToolChange ? (setupUnit * toolChanges) : 0;
   const techTime = requiresToolChange 
-    ? ((toolChanges * toolUnit) + (trams * (machine.tramTime || 3))) 
+    ? ((toolChanges * toolUnit) + (trams * tramUnit)) 
     : 0;
   
   const operationPerPiece = (strikesPerPiece * strike) + totalTurnTime + totalRotateTime;
@@ -72,12 +73,11 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   const totalMeasure = checkTime * numChecks;
   
   const rawTotal = totalSetup + techTime + totalOp + totalMeasure;
-  return rawTotal / ((machine.efficiency || 100) / 100);
+  const efficiencyFactor = (machine.efficiency || 100) / 100;
+  
+  return rawTotal / (efficiencyFactor > 0 ? efficiencyFactor : 1);
 };
 
-/**
- * Divide los lotes en "rebanadas" diarias según la capacidad productiva de la máquina.
- */
 export interface BatchSlice {
   batch: Batch;
   date: string;
@@ -93,8 +93,6 @@ export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Bat
 
   const slices: BatchSlice[] = [];
   const dailyCapacity = (machine.productiveHours || 16) * 60;
-  
-  // Mapa para rastrear el tiempo usado por día
   const dailyTimeUsed: Record<string, number> = {};
 
   machineBatches.forEach(batch => {
@@ -104,11 +102,9 @@ export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Bat
 
     while (remainingTime > 0) {
       if (!dailyTimeUsed[currentDateStr]) dailyTimeUsed[currentDateStr] = 0;
-      
       const capacityLeft = dailyCapacity - dailyTimeUsed[currentDateStr];
       
       if (capacityLeft <= 0) {
-        // Si el día está lleno, pasar al siguiente día
         const nextDate = new Date(currentDateStr);
         nextDate.setDate(nextDate.getDate() + 1);
         currentDateStr = nextDate.toISOString().split('T')[0];

@@ -62,7 +62,8 @@ export interface Batch {
   scheduledDate: string;
   notes: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  isSimulation?: boolean; // Campo para identificar cargas de validación manual
+  isSimulation?: boolean; 
+  imageUrl?: string; // Foto de la pieza
 }
 
 export interface TimeRecord {
