@@ -227,19 +227,6 @@ export default function App() {
     { id: 'records', label: 'Registros', icon: '📊' },
   ];
 
-  const PARAM_LABELS: Record<string, string> = {
-    totalTime: 'Tiempo de Lote',
-    strikeTime: 'Tiempo de Golpe',
-    toolChangeTime: 'Cambio Herramental',
-    setupTime: 'Setup Inicial',
-    measurementTime: 'Medición / Pz',
-    tramTime: 'Tiempo de Tramo',
-    craneTurnTime: 'Grúa Volteo',
-    craneRotateTime: 'Grúa Giro',
-    manualTurnTime: 'Volteo Manual',
-    manualRotateTime: 'Giro Manual'
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-['Inter'] relative overflow-hidden">
       
@@ -416,7 +403,6 @@ export default function App() {
             </div>
           )}
 
-          {/* VISTAS RESTANTES - SE MANTIENEN IGUAL */}
           {activeTab === 'machines' && (
             <div className="space-y-10">
               <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Gestión de Máquinas</h2>
@@ -471,6 +457,12 @@ export default function App() {
                          <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Identificador de Pieza</label>
                          <input className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} placeholder="Ej: Soporte Frontal X1" />
                        </div>
+
+                       {/* NUEVO: SELECTOR DE FECHA PARA PROGRAMACIÓN */}
+                       <div className="group">
+                         <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Fecha Programada para Producción</label>
+                         <input type="date" className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.scheduledDate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, scheduledDate: e.target.value}})} />
+                       </div>
                        
                        <div className="grid grid-cols-2 gap-6">
                          <div>
@@ -506,7 +498,6 @@ export default function App() {
                           )}
                        </div>
 
-                       {/* CAMPOS TÉCNICOS OCULTOS EN SIMULACIÓN */}
                        {!isEditing.data.isSimulation && (
                          <div className="grid grid-cols-2 gap-6 animate-in fade-in">
                             <div>
