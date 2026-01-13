@@ -28,10 +28,6 @@ export const subscribeToChanges = (table: string, callback: (payload: any) => vo
     .subscribe();
 };
 
-/**
- * Para evitar errores de "column not found" en Supabase, guardamos los campos extendidos
- * dentro del campo 'notes' como un JSON.
- */
 const mapBatchToDB = (b: Batch) => {
   const isSim = !!b.isSimulation;
   const finalName = isSim ? `[SIM] ${b.name}` : b.name;
@@ -61,6 +57,7 @@ const mapBatchToDB = (b: Batch) => {
     pieces: Number(b.pieces) || 0,
     strikes_per_piece: Number(b.strikesPerPiece) || 0, 
     total_time: Number(b.totalTime) || 0, 
+    // Fix: Using scheduledDate from the Batch interface instead of scheduled_date
     scheduled_date: b.scheduledDate || new Date().toISOString().split('T')[0], 
     notes: JSON.stringify(extendedData)
   };
@@ -109,7 +106,11 @@ export const fetchThicknesses = async (): Promise<Thickness[]> => {
   const { data, error } = await client.from('thicknesses').select('*');
   if (error) return [];
   return data.map((t: any) => ({
-    id: t.id, value: t.value, material: t.material, recommended_tool_ids: t.recommended_tool_ids || []
+    id: t.id, 
+    value: t.value, 
+    material: t.material, 
+    recommended_tool_ids: t.recommended_tool_ids || [],
+    compatible_machine_ids: t.compatible_machine_ids || []
   }));
 };
 
@@ -117,7 +118,11 @@ export const saveThickness = async (th: Thickness) => {
   const client = getClient();
   if (!client) return;
   await client.from('thicknesses').upsert({
-    id: th.id, value: th.value, material: th.material, recommended_tool_ids: th.recommendedToolIds
+    id: th.id, 
+    value: th.value, 
+    material: th.material, 
+    recommended_tool_ids: th.recommendedToolIds,
+    compatible_machine_ids: th.compatibleMachineIds
   });
 };
 
@@ -127,11 +132,6 @@ export const deleteThickness = async (id: string) => {
   await client.from('thicknesses').delete().eq('id', id);
 };
 
-/**
- * Al igual que con los lotes, encapsulamos los parámetros técnicos de la máquina
- * en el campo 'description' para evitar errores de esquema si faltan columnas
- * como 'max_length' o 'max_tons'.
- */
 export const fetchMachines = async (): Promise<MachineConfig[]> => {
   const client = getClient();
   if (!client) return [];
@@ -152,8 +152,8 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
       manualRotateTime: 0.05,
       efficiency: 100,
       productiveHours: 16,
-      maxLength: 3000,
-      maxTons: 100,
+      maxLength: 2500,
+      maxTons: 60,
       compatibleToolIds: []
     };
 
@@ -162,9 +162,7 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
         const parsed = JSON.parse(m.description);
         techData = { ...techData, ...parsed };
       }
-    } catch (e) {
-      // Si no es JSON, techData.description ya tiene el valor de m.description
-    }
+    } catch (e) {}
 
     return {
       id: m.id,
@@ -178,7 +176,6 @@ export const saveMachine = async (m: MachineConfig) => {
   const client = getClient();
   if (!client) throw new Error("Cloud no disponible");
 
-  // Empaquetamos todos los campos técnicos en description
   const techData = {
     description: m.description || '',
     strikeTime: Number(m.strikeTime) || 0.005,

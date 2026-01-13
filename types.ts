@@ -4,6 +4,7 @@ export interface Thickness {
   value: number; // mm
   material: string;
   recommendedToolIds: string[];
+  compatibleMachineIds: string[]; // Nueva relación
 }
 
 export interface Tool {

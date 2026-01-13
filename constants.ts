@@ -17,7 +17,6 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualRotateTime: 0.05,
     efficiency: 100,
     productiveHours: 16,
-    // Fix: Added missing required properties based on model name
     maxLength: 2500,
     maxTons: 60,
     compatibleToolIds: []
@@ -37,7 +36,6 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualRotateTime: 0.08,
     efficiency: 100,
     productiveHours: 16,
-    // Fix: Added missing required properties based on model name
     maxLength: 3000,
     maxTons: 150,
     compatibleToolIds: []
@@ -57,7 +55,6 @@ export const INITIAL_MACHINES: MachineConfig[] = [
     manualRotateTime: 0.12,
     efficiency: 100,
     productiveHours: 16,
-    // Fix: Added missing required properties based on model name
     maxLength: 4000,
     maxTons: 220,
     compatibleToolIds: []
