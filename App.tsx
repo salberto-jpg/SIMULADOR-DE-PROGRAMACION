@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_MACHINES } from './constants';
 import { MachineConfig, Batch, Tool, Thickness, TimeRecord } from './types';
-import { calculateBatchTime, formatTime, parseTimeToMinutes } from './utils/helpers';
+import { calculateBatchTime, formatTime, parseTimeToMinutes, getMachineTimelineSlices, BatchSlice } from './utils/helpers';
 import { optimizeProductionSchedule } from './services/geminiService';
 import { 
   initSupabase, fetchMachines, fetchBatches, fetchTools, fetchThicknesses,
@@ -18,24 +18,28 @@ type TabType = 'schedule' | 'machines' | 'tools' | 'thickness' | 'records';
 
 const MachineProductionCard: React.FC<{ 
   machine: MachineConfig; 
-  batches: Batch[]; 
+  allBatches: Batch[]; 
+  selectedDate: string;
   onEditBatch: (b: Batch) => void; 
   onDeleteBatch: (id: string) => void; 
-}> = ({ machine, batches, onEditBatch, onDeleteBatch }) => {
-  const machineBatches = batches
-    .filter(b => b.machineId === machine.id)
-    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+}> = ({ machine, allBatches, selectedDate, onEditBatch, onDeleteBatch }) => {
+  
+  // Obtenemos todos los slices (fragmentos diarios) para esta máquina
+  const allSlices = getMachineTimelineSlices(machine, allBatches);
+  
+  // Filtramos solo los slices que ocurren en la fecha seleccionada
+  const daySlices = allSlices.filter(s => s.date === selectedDate);
 
-  const totalMinutes = machineBatches.reduce((acc, b) => acc + (b.totalTime || 0), 0);
+  const totalMinutesInDay = daySlices.reduce((acc, s) => acc + s.timeInDay, 0);
   const capacityMinutes = (machine.productiveHours || 16) * 60;
-  const occupancy = Math.min(100, (totalMinutes / capacityMinutes) * 100);
+  const occupancy = Math.min(100, (totalMinutesInDay / capacityMinutes) * 100);
 
   return (
     <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[420px] md:h-[520px] hover:shadow-xl hover:border-blue-800/30 transition-all group">
       <div className="p-5 md:p-7 border-b border-slate-100 bg-slate-50/50">
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-lg md:text-xl font-black text-blue-950 uppercase tracking-tighter">{machine.id}</h3>
-          <span className={`text-[8px] md:text-[9px] font-black px-2.5 py-1 rounded-full uppercase ${occupancy > 90 ? 'bg-red-500 text-white' : occupancy > 70 ? 'bg-orange-500 text-white' : 'bg-blue-800 text-white'}`}>
+          <span className={`text-[8px] md:text-[9px] font-black px-2.5 py-1 rounded-full uppercase ${occupancy > 95 ? 'bg-red-500 text-white' : occupancy > 75 ? 'bg-orange-500 text-white' : 'bg-blue-800 text-white'}`}>
             {occupancy.toFixed(0)}%
           </span>
         </div>
@@ -43,38 +47,56 @@ const MachineProductionCard: React.FC<{
           <div className="bg-blue-800 h-full transition-all duration-1000" style={{ width: `${occupancy}%` }} />
         </div>
         <div className="flex justify-between mt-3 text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">
-          <span>{formatTime(totalMinutes)}</span>
-          <span>{machine.productiveHours}HS Capacidad</span>
+          <span>{formatTime(totalMinutesInDay)} OCUPADO</span>
+          <span>{machine.productiveHours}HS MÁX</span>
         </div>
       </div>
 
       <div className="flex-1 p-4 md:p-5 space-y-3.5 overflow-y-auto scrollbar-hide">
-        {machineBatches.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[10px] font-black text-slate-300 uppercase tracking-widest italic opacity-60">Sin carga activa</div>
+        {daySlices.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center opacity-40">
+             <span className="text-3xl mb-2">🏖️</span>
+             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Día sin carga</div>
+          </div>
         ) : (
-          machineBatches.map(batch => (
-            <div key={batch.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-blue-800/20 hover:shadow-md transition-all relative group/item">
+          daySlices.map((slice, idx) => (
+            <div key={`${slice.batch.id}-${idx}`} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-white hover:border-blue-800/20 hover:shadow-md transition-all relative group/item">
+              
               <div className="flex justify-between mb-1.5">
                 <div className="flex items-center gap-2 truncate pr-2">
-                  {batch.isSimulation && (
+                  {slice.batch.isSimulation && (
                     <span className="text-[7px] font-black bg-amber-500 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter">Sim</span>
                   )}
-                  <span className="text-[11px] font-black text-blue-950 uppercase truncate">{batch.name}</span>
+                  <span className="text-[11px] font-black text-blue-950 uppercase truncate">{slice.batch.name}</span>
                 </div>
-                <span className="text-[9px] font-black text-blue-800 whitespace-nowrap">{formatTime(batch.totalTime)}</span>
+                <span className="text-[9px] font-black text-blue-800 whitespace-nowrap">{formatTime(slice.timeInDay)}</span>
               </div>
-              <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase tracking-wide">
-                <span>{batch.pieces} Pzs</span>
-                {!batch.isSimulation && (
-                  <>
-                    <span>•</span>
-                    <span>{batch.thickness}mm</span>
-                  </>
-                )}
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase tracking-wide">
+                  <span>{slice.batch.pieces} Pzs</span>
+                  {!slice.batch.isSimulation && (
+                    <>
+                      <span>•</span>
+                      <span>{slice.batch.thickness}mm</span>
+                    </>
+                  )}
+                </div>
+                
+                {/* INDICADORES DE CONTINUACIÓN */}
+                <div className="flex gap-1">
+                  {slice.isContinuation && (
+                    <span className="text-[7px] font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-tighter">Viene de ayer</span>
+                  )}
+                  {slice.hasMore && (
+                    <span className="text-[7px] font-black bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-tighter">Sigue mañana</span>
+                  )}
+                </div>
               </div>
+
               <div className="mt-3 flex gap-2 opacity-100 md:opacity-0 group-hover/item:opacity-100 transition-all">
-                <button onClick={() => onEditBatch(batch)} className="text-[8px] md:text-[9px] font-black text-blue-800 uppercase bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100/50">Editar</button>
-                <button onClick={() => { if(confirm('¿Eliminar lote?')) onDeleteBatch(batch.id); }} className="text-[8px] md:text-[9px] font-black text-red-500 uppercase bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100/50">Borrar</button>
+                <button onClick={() => onEditBatch(slice.batch)} className="text-[8px] md:text-[9px] font-black text-blue-800 uppercase bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100/50">Editar Lote</button>
+                <button onClick={() => { if(confirm('¿Eliminar lote completo?')) onDeleteBatch(slice.batch.id); }} className="text-[8px] md:text-[9px] font-black text-red-500 uppercase bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100/50">Borrar</button>
               </div>
             </div>
           ))
@@ -89,6 +111,7 @@ const MachineProductionCard: React.FC<{
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('schedule');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [machines, setMachines] = useState<MachineConfig[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -211,13 +234,6 @@ export default function App() {
     setTimeout(() => setStatus(""), 2000);
     loadData();
   };
-
-  const groupedRecords = records.reduce((acc, r) => {
-    if (!acc[r.machineId]) acc[r.machineId] = {};
-    if (!acc[r.machineId][r.parameter]) acc[r.machineId][r.parameter] = [];
-    acc[r.machineId][r.parameter].push(r);
-    return acc;
-  }, {} as Record<string, Record<string, TimeRecord[]>>);
 
   const NAV_ITEMS = [
     { id: 'schedule', label: 'Producción', icon: '📋' },
@@ -342,9 +358,21 @@ export default function App() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                  <div>
                     <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Panel de Producción</h2>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Carga manual de simulación para validar parámetros</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Capacidad diaria optimizada por segmentación automática</p>
                  </div>
-                 <div className="flex w-full md:w-auto gap-3">
+                 <div className="flex flex-wrap items-center w-full md:w-auto gap-4">
+                   
+                   {/* CALENDARIO DE FILTRO AL LADO DEL BOTÓN */}
+                   <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm group">
+                      <span className="text-[9px] font-black text-blue-900 uppercase ml-2">Día de Vista:</span>
+                      <input 
+                        type="date" 
+                        className="bg-slate-50 border-none p-1.5 rounded-lg text-[11px] font-black text-blue-950 uppercase outline-none focus:bg-blue-50 transition-colors"
+                        value={selectedDate}
+                        onChange={e => setSelectedDate(e.target.value)}
+                      />
+                   </div>
+
                    <button 
                      onClick={() => setIsEditing({ 
                        type: 'batch', 
@@ -367,16 +395,17 @@ export default function App() {
                          trams: 1,
                          toolChanges: 1,
                          totalTime: 0, 
-                         scheduledDate: new Date().toISOString().split('T')[0], 
+                         scheduledDate: selectedDate, // Por defecto a la fecha seleccionada
                          notes: '', 
                          priority: 'medium',
                          isSimulation: true
                        } 
                      })} 
-                     className="flex-1 md:flex-none bg-blue-800 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-900"
+                     className="bg-blue-800 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-900"
                    >
-                     + Nueva Simulación
+                     + Nuevo Lote
                    </button>
+                   
                    <button onClick={async () => {
                      setStatus("IA Analizando...");
                      const result = await optimizeProductionSchedule(batches, machines, tools, thicknesses);
@@ -391,13 +420,20 @@ export default function App() {
                        loadData();
                      } else setStatus("IA: Error");
                      setTimeout(() => setStatus(""), 4000);
-                   }} className="flex-1 md:flex-none bg-blue-950 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all hover:bg-blue-900">Optimizar con IA</button>
+                   }} className="bg-blue-950 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all hover:bg-blue-900">IA Optimizar</button>
                  </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
                 {machines.map(m => (
-                  <MachineProductionCard key={m.id} machine={m} batches={batches} onEditBatch={(b: Batch) => setIsEditing({ type: 'batch', data: b })} onDeleteBatch={(id: string) => deleteBatchFromCloud(id).then(loadData)} />
+                  <MachineProductionCard 
+                    key={m.id} 
+                    machine={m} 
+                    allBatches={batches} 
+                    selectedDate={selectedDate}
+                    onEditBatch={(b: Batch) => setIsEditing({ type: 'batch', data: b })} 
+                    onDeleteBatch={(id: string) => deleteBatchFromCloud(id).then(loadData)} 
+                  />
                 ))}
               </div>
             </div>
@@ -417,7 +453,7 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-2 gap-4 mb-8">
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <span className="text-[8px] font-black text-slate-400 uppercase block mb-1">Carga Actual</span>
+                        <span className="text-[8px] font-black text-slate-400 uppercase block mb-1">Carga Total</span>
                         <span className="text-sm font-black text-blue-950">{batches.filter(b => b.machineId === m.id).length} Lotes</span>
                       </div>
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -458,7 +494,7 @@ export default function App() {
                          <input className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} placeholder="Ej: Soporte Frontal X1" />
                        </div>
 
-                       {/* NUEVO: SELECTOR DE FECHA PARA PROGRAMACIÓN */}
+                       {/* SELECTOR DE FECHA PARA PROGRAMACIÓN */}
                        <div className="group">
                          <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Fecha Programada para Producción</label>
                          <input type="date" className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.scheduledDate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, scheduledDate: e.target.value}})} />

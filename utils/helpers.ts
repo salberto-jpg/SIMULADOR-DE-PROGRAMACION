@@ -53,11 +53,9 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   const craneTurnUnit = machine.craneTurnTime || 1;
   const craneRotateUnit = machine.craneRotateTime || 1;
 
-  // Cálculo de tiempo de Volteo (Unitario * Cantidad)
   const turnUnit = useCraneTurn ? craneTurnUnit : manualTurnUnit;
   const totalTurnTime = turnUnit * turnQuantity;
 
-  // Cálculo de tiempo de Giro (Unitario * Cantidad)
   const rotateUnit = useCraneRotate ? craneRotateUnit : manualRotateUnit;
   const totalRotateTime = rotateUnit * rotateQuantity;
   
@@ -75,4 +73,68 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   
   const rawTotal = totalSetup + techTime + totalOp + totalMeasure;
   return rawTotal / ((machine.efficiency || 100) / 100);
+};
+
+/**
+ * Divide los lotes en "rebanadas" diarias según la capacidad productiva de la máquina.
+ */
+export interface BatchSlice {
+  batch: Batch;
+  date: string;
+  timeInDay: number;
+  isContinuation: boolean;
+  hasMore: boolean;
+}
+
+export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Batch[]): BatchSlice[] => {
+  const machineBatches = allBatches
+    .filter(b => b.machineId === machine.id)
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+
+  const slices: BatchSlice[] = [];
+  const dailyCapacity = (machine.productiveHours || 16) * 60;
+  
+  // Mapa para rastrear el tiempo usado por día
+  const dailyTimeUsed: Record<string, number> = {};
+
+  machineBatches.forEach(batch => {
+    let remainingTime = batch.totalTime;
+    let currentDateStr = batch.scheduledDate;
+    let isContinuation = false;
+
+    while (remainingTime > 0) {
+      if (!dailyTimeUsed[currentDateStr]) dailyTimeUsed[currentDateStr] = 0;
+      
+      const capacityLeft = dailyCapacity - dailyTimeUsed[currentDateStr];
+      
+      if (capacityLeft <= 0) {
+        // Si el día está lleno, pasar al siguiente día
+        const nextDate = new Date(currentDateStr);
+        nextDate.setDate(nextDate.getDate() + 1);
+        currentDateStr = nextDate.toISOString().split('T')[0];
+        continue;
+      }
+
+      const timeToUse = Math.min(remainingTime, capacityLeft);
+      remainingTime -= timeToUse;
+      dailyTimeUsed[currentDateStr] += timeToUse;
+
+      slices.push({
+        batch,
+        date: currentDateStr,
+        timeInDay: timeToUse,
+        isContinuation,
+        hasMore: remainingTime > 0
+      });
+
+      if (remainingTime > 0) {
+        isContinuation = true;
+        const nextDate = new Date(currentDateStr);
+        nextDate.setDate(nextDate.getDate() + 1);
+        currentDateStr = nextDate.toISOString().split('T')[0];
+      }
+    }
+  });
+
+  return slices;
 };
