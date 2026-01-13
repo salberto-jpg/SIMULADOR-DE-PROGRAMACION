@@ -7,7 +7,6 @@ export const formatTime = (totalMinutes: number): string => {
   const minutes = Math.floor(totalMinutes % 60);
   const seconds = Math.round((totalMinutes * 60) % 60);
   
-  // Ajuste por si el redondeo de segundos llega a 60
   if (seconds === 60) {
       return formatTime(totalMinutes + 1/60 - seconds/3600);
   }
@@ -38,9 +37,9 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
     trams = 1,
     toolChanges = 1,
     useCraneTurn = false,
-    turnQuantity = 1,
+    turnQuantity = 0,
     useCraneRotate = false,
-    rotateQuantity = 1,
+    rotateQuantity = 0,
     requiresToolChange = false
   } = batch;
 
@@ -49,16 +48,18 @@ export const calculateBatchTime = (batch: Partial<Batch>, machine: MachineConfig
   const setupUnit = machine.setupTime || 10;
   const measureUnit = machine.measurementTime || 0.5;
   
-  const manualTurn = machine.manualTurnTime || 0.05;
-  const manualRotate = machine.manualRotateTime || 0.05;
+  const manualTurnUnit = machine.manualTurnTime || 0.05;
+  const manualRotateUnit = machine.manualRotateTime || 0.05;
+  const craneTurnUnit = machine.craneTurnTime || 1;
+  const craneRotateUnit = machine.craneRotateTime || 1;
 
-  const totalTurnTime = useCraneTurn 
-    ? (machine.craneTurnTime * turnQuantity) 
-    : manualTurn;
+  // Cálculo de tiempo de Volteo (Unitario * Cantidad)
+  const turnUnit = useCraneTurn ? craneTurnUnit : manualTurnUnit;
+  const totalTurnTime = turnUnit * turnQuantity;
 
-  const totalRotateTime = useCraneRotate 
-    ? (machine.craneRotateTime * rotateQuantity) 
-    : manualRotate;
+  // Cálculo de tiempo de Giro (Unitario * Cantidad)
+  const rotateUnit = useCraneRotate ? craneRotateUnit : manualRotateUnit;
+  const totalRotateTime = rotateUnit * rotateQuantity;
   
   const totalSetup = requiresToolChange ? (setupUnit * toolChanges) : 0;
   const techTime = requiresToolChange 

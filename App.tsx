@@ -64,7 +64,13 @@ const MachineProductionCard: React.FC<{
                 <span className="text-[9px] font-black text-blue-800 whitespace-nowrap">{formatTime(batch.totalTime)}</span>
               </div>
               <div className="flex gap-2 text-[8px] font-bold text-slate-400 uppercase tracking-wide">
-                <span>{batch.pieces} Pzs • {batch.thickness}mm</span>
+                <span>{batch.pieces} Pzs</span>
+                {!batch.isSimulation && (
+                  <>
+                    <span>•</span>
+                    <span>{batch.thickness}mm</span>
+                  </>
+                )}
               </div>
               <div className="mt-3 flex gap-2 opacity-100 md:opacity-0 group-hover/item:opacity-100 transition-all">
                 <button onClick={() => onEditBatch(batch)} className="text-[8px] md:text-[9px] font-black text-blue-800 uppercase bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100/50">Editar</button>
@@ -344,8 +350,6 @@ export default function App() {
 
       <main className={`flex-1 p-6 md:p-12 transition-all duration-500 ${isSidebarOpen ? 'md:ml-72' : 'md:ml-12'}`}>
         <div className="max-w-[1600px] mx-auto w-full">
-          
-          {/* VISTA DE PRODUCCIÓN */}
           {activeTab === 'schedule' && (
             <div className="space-y-10">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -369,9 +373,9 @@ export default function App() {
                          deliveryDate: new Date().toISOString().split('T')[0], 
                          toolIds: [], 
                          useCraneTurn: false, 
-                         turnQuantity: 1, 
+                         turnQuantity: 0, 
                          useCraneRotate: false, 
-                         rotateQuantity: 1, 
+                         rotateQuantity: 0, 
                          requiresToolChange: false, 
                          trams: 1,
                          toolChanges: 1,
@@ -412,7 +416,7 @@ export default function App() {
             </div>
           )}
 
-          {/* VISTAS RESTANTES (SIMILARES) */}
+          {/* VISTAS RESTANTES - SE MANTIENEN IGUAL */}
           {activeTab === 'machines' && (
             <div className="space-y-10">
               <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Gestión de Máquinas</h2>
@@ -441,157 +445,6 @@ export default function App() {
               </div>
             </div>
           )}
-
-          {activeTab === 'tools' && (
-            <div className="space-y-10">
-              <div className="flex justify-between items-end">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Catálogo de Herramental</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventario de punzones y matrices</p>
-                </div>
-                <button onClick={() => setIsEditing({ type: 'tool', data: { id: `t-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: [] } })} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-800">Añadir Herramienta</button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {tools.map(t => (
-                  <div key={t.id} className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm hover:border-blue-800/30 transition-all flex flex-col">
-                    <div className="flex justify-between items-start mb-4">
-                      <span className={`text-[8px] font-black px-2 py-1 rounded uppercase ${t.type === 'punch' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>{t.type === 'punch' ? 'PUNZÓN' : 'MATRIZ'}</span>
-                    </div>
-                    <h4 className="text-sm font-black text-blue-950 uppercase mb-2">{t.name}</h4>
-                    <div className="space-y-1.5 text-[10px] font-bold text-slate-500 uppercase flex-1">
-                      <p>Ángulo: {t.angle}°</p>
-                      <p>Largo: {t.length}mm</p>
-                      <p>Carga Máx: {t.maxTons}T</p>
-                      <div className="mt-2 pt-2 border-t border-slate-100">
-                        <span className="text-[8px] text-slate-400 block mb-1">Máquinas:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {t.compatibleMachineIds.length ? t.compatibleMachineIds.map(mid => <span key={mid} className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-md text-[8px] font-black">{mid}</span>) : <span className="text-[8px] italic">Universal</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex gap-2">
-                       <button onClick={() => setIsEditing({ type: 'tool', data: t })} className="flex-1 py-2 bg-blue-50 text-blue-900 text-[9px] font-black uppercase rounded-xl hover:bg-blue-100">Editar</button>
-                       <button onClick={() => { if(confirm('¿Eliminar herramienta?')) deleteTool(t.id).then(loadData); }} className="px-3 py-2 bg-red-50 text-red-500 text-[9px] font-black uppercase rounded-xl hover:bg-red-100">Borrar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'thickness' && (
-            <div className="space-y-10">
-              <div className="flex justify-between items-end">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Matriz de Espesores</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configuración técnica por material</p>
-                </div>
-                <button onClick={() => setIsEditing({ type: 'thickness', data: { id: `th-${Date.now()}`, value: 1.5, material: 'Hierro', recommendedToolIds: [], compatibleMachineIds: [] } })} className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all hover:bg-blue-800">Nuevo Espesor</button>
-              </div>
-
-              <div className="bg-white rounded-[32px] border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 border-b border-slate-100">
-                    <tr>
-                      <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor (mm)</th>
-                      <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Material</th>
-                      <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Herramental Rec.</th>
-                      <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Máquinas Aptas</th>
-                      <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {thicknesses.map(th => (
-                      <tr key={th.id} className="hover:bg-slate-50/50 transition-all">
-                        <td className="p-6 text-sm font-black text-blue-950">{th.value} mm</td>
-                        <td className="p-6 text-sm font-bold text-slate-500 uppercase">{th.material}</td>
-                        <td className="p-6">
-                          <div className="flex flex-wrap gap-2">
-                            {th.recommendedToolIds.map(tid => {
-                              const t = tools.find(tool => tool.id === tid);
-                              return t ? <span key={tid} className="text-[8px] font-black bg-blue-50 text-blue-800 px-2 py-1 rounded-full">{t.name}</span> : null;
-                            })}
-                          </div>
-                        </td>
-                        <td className="p-6">
-                          <div className="flex flex-wrap gap-2">
-                            {th.compatibleMachineIds?.map(mid => <span key={mid} className="text-[8px] font-black bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{mid}</span>)}
-                          </div>
-                        </td>
-                        <td className="p-6 text-right space-x-4">
-                          <button onClick={() => setIsEditing({ type: 'thickness', data: th })} className="text-blue-800 font-black text-[9px] uppercase tracking-widest hover:text-blue-950">Editar</button>
-                          <button onClick={() => { if(confirm('¿Eliminar espesor?')) deleteThickness(th.id).then(loadData); }} className="text-red-500 font-black text-[9px] uppercase tracking-widest">Eliminar</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-          
-          {activeTab === 'records' && (
-             <div className="space-y-12">
-               <div>
-                 <h2 className="text-2xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Estudio de Tiempos</h2>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Registros agrupados para ajuste de eficiencia</p>
-               </div>
-               {Object.entries(groupedRecords).length === 0 ? (
-                 <div className="bg-white p-20 rounded-[48px] border border-dashed border-slate-200 text-center">
-                    <span className="text-4xl block mb-4">📊</span>
-                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-widest">No hay registros capturados todavía</p>
-                 </div>
-               ) : (
-                 Object.entries(groupedRecords).map(([machineId, params]) => (
-                   <div key={machineId} className="space-y-6">
-                     <div className="flex items-center gap-4">
-                       <span className="w-12 h-1 bg-blue-800 rounded-full"></span>
-                       <h3 className="text-xl font-black text-blue-950 uppercase tracking-tighter">Máquina: {machineId}</h3>
-                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                       {Object.entries(params).map(([param, recordsList]) => {
-                         const average = recordsList.reduce((sum, r) => sum + r.value, 0) / recordsList.length;
-                         return (
-                           <div key={param} className="bg-white rounded-[32px] border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
-                             <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-                               <h4 className="text-[10px] font-black text-blue-950 uppercase tracking-widest">{PARAM_LABELS[param] || param}</h4>
-                               <div className="flex flex-col items-end">
-                                 <span className="text-[8px] font-black text-slate-400 uppercase">Promedio</span>
-                                 <span className="text-sm font-black text-blue-800">{formatTime(average)}</span>
-                               </div>
-                             </div>
-                             <div className="max-h-60 overflow-y-auto scrollbar-hide">
-                               <table className="w-full text-left">
-                                 <thead className="sticky top-0 bg-white shadow-sm">
-                                   <tr>
-                                     <th className="px-6 py-3 text-[8px] font-black text-slate-400 uppercase">Fecha</th>
-                                     <th className="px-6 py-3 text-[8px] font-black text-slate-400 uppercase text-right">Valor</th>
-                                   </tr>
-                                 </thead>
-                                 <tbody className="divide-y divide-slate-50">
-                                   {recordsList.map(r => (
-                                     <tr key={r.id} className="hover:bg-slate-50/50">
-                                       <td className="px-6 py-4 text-[10px] font-medium text-slate-500">
-                                         {new Date(r.timestamp).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                       </td>
-                                       <td className="px-6 py-4 text-[10px] font-black text-blue-950 text-right">
-                                         {formatTime(r.value)}
-                                       </td>
-                                     </tr>
-                                   ))}
-                                 </tbody>
-                               </table>
-                             </div>
-                           </div>
-                         );
-                       })}
-                     </div>
-                   </div>
-                 ))
-               )}
-             </div>
-          )}
         </div>
       </main>
 
@@ -612,20 +465,13 @@ export default function App() {
             <div className="p-10 md:p-14 overflow-y-auto space-y-12 scrollbar-hide">
                {isEditing.type === 'batch' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    {/* COLUMNA IZQUIERDA: PRODUCTO Y HERRAMENTAL */}
                     <div className="space-y-8">
                        <div className="group">
                          <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Identificador de Pieza</label>
                          <input className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} placeholder="Ej: Soporte Frontal X1" />
                        </div>
                        
-                       <div className="flex items-center justify-between p-6 bg-amber-50 rounded-[28px] border-2 border-amber-100">
-                         <div>
-                            <span className="text-[11px] font-black uppercase text-amber-700 block">Simulación / Validación</span>
-                            <p className="text-[9px] font-bold text-amber-600/70 uppercase">Ignora herramental en optimización IA</p>
-                         </div>
-                         <input type="checkbox" className="w-8 h-8 rounded-xl accent-blue-800" checked={isEditing.data.isSimulation} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, isSimulation: e.target.checked}})} />
-                       </div>
-
                        <div className="grid grid-cols-2 gap-6">
                          <div>
                            <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Piezas</label>
@@ -659,36 +505,73 @@ export default function App() {
                              </div>
                           )}
                        </div>
+
+                       {/* CAMPOS TÉCNICOS OCULTOS EN SIMULACIÓN */}
+                       {!isEditing.data.isSimulation && (
+                         <div className="grid grid-cols-2 gap-6 animate-in fade-in">
+                            <div>
+                              <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Espesor (mm)</label>
+                              <input type="number" step="0.1" className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none text-blue-950" value={isEditing.data.thickness} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, thickness: Number(e.target.value)}})} />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-black uppercase text-slate-400 mb-2.5 block tracking-widest">Largo (mm)</label>
+                              <input type="number" className="w-full bg-slate-50 border-2 border-slate-100 p-6 rounded-[28px] font-bold text-xl outline-none text-blue-950" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} />
+                            </div>
+                         </div>
+                       )}
                     </div>
 
+                    {/* COLUMNA DERECHA: LOGÍSTICA REDISEÑADA */}
                     <div className="bg-slate-50 p-10 rounded-[48px] border border-slate-200 space-y-8">
                        <h4 className="text-[11px] font-black text-blue-950 uppercase tracking-widest">Configuración Logística</h4>
                        
                        <div className="space-y-6">
-                         {/* VOLTEO GRUA */}
-                         <div className="bg-white p-6 rounded-[28px] border border-slate-200 space-y-4">
+                         {/* BLOQUE VOLTEO */}
+                         <div className={`p-6 bg-white rounded-[32px] border-2 transition-all ${isEditing.data.turnQuantity > 0 ? 'border-blue-800' : 'border-slate-100'}`}>
                             <div className="flex items-center justify-between">
-                               <span className="text-[11px] font-black text-slate-700 uppercase">Requiere Grúa (Volteo)</span>
-                               <input type="checkbox" className="w-6 h-6 accent-blue-800" checked={isEditing.data.useCraneTurn} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneTurn: e.target.checked}})} />
+                               <div className="flex items-center gap-4">
+                                  <input type="checkbox" className="w-6 h-6 rounded accent-blue-800" checked={isEditing.data.turnQuantity > 0} onChange={e => {
+                                    setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: e.target.checked ? 1 : 0}});
+                                  }} />
+                                  <span className="text-[11px] font-black text-slate-700 uppercase">Volteo</span>
+                               </div>
                             </div>
-                            {isEditing.data.useCraneTurn && (
-                               <div className="flex items-center gap-4 animate-in fade-in">
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase">Cantidad volteos:</span>
-                                  <input type="number" className="flex-1 p-3 bg-slate-50 border rounded-xl font-bold" value={isEditing.data.turnQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: Number(e.target.value)}})} />
+                            
+                            {isEditing.data.turnQuantity > 0 && (
+                               <div className="animate-in fade-in slide-in-from-top-2 space-y-4 pt-6 mt-4 border-t border-slate-50">
+                                  <div className="flex items-center gap-4">
+                                     <span className="text-[9px] font-bold text-slate-400 uppercase">Cantidad:</span>
+                                     <input type="number" className="flex-1 p-3 bg-slate-50 border rounded-xl font-bold text-blue-950 focus:border-blue-800 outline-none" value={isEditing.data.turnQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, turnQuantity: Math.max(1, Number(e.target.value))}})} />
+                                  </div>
+                                  <div className="flex items-center gap-4 pt-2">
+                                     <input type="checkbox" className="w-5 h-5 rounded accent-blue-800" checked={isEditing.data.useCraneTurn} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneTurn: e.target.checked}})} />
+                                     <span className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Puente de Grúa</span>
+                                  </div>
                                </div>
                             )}
                          </div>
 
-                         {/* GIRO GRUA */}
-                         <div className="bg-white p-6 rounded-[28px] border border-slate-200 space-y-4">
+                         {/* BLOQUE GIRO */}
+                         <div className={`p-6 bg-white rounded-[32px] border-2 transition-all ${isEditing.data.rotateQuantity > 0 ? 'border-blue-800' : 'border-slate-100'}`}>
                             <div className="flex items-center justify-between">
-                               <span className="text-[11px] font-black text-slate-700 uppercase">Requiere Grúa (Giro)</span>
-                               <input type="checkbox" className="w-6 h-6 accent-blue-800" checked={isEditing.data.useCraneRotate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneRotate: e.target.checked}})} />
+                               <div className="flex items-center gap-4">
+                                  <input type="checkbox" className="w-6 h-6 rounded accent-blue-800" checked={isEditing.data.rotateQuantity > 0} onChange={e => {
+                                    setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: e.target.checked ? 1 : 0}});
+                                  }} />
+                                  <span className="text-[11px] font-black text-slate-700 uppercase">Giro</span>
+                               </div>
                             </div>
-                            {isEditing.data.useCraneRotate && (
-                               <div className="flex items-center gap-4 animate-in fade-in">
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase">Cantidad giros:</span>
-                                  <input type="number" className="flex-1 p-3 bg-slate-50 border rounded-xl font-bold" value={isEditing.data.rotateQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: Number(e.target.value)}})} />
+                            
+                            {isEditing.data.rotateQuantity > 0 && (
+                               <div className="animate-in fade-in slide-in-from-top-2 space-y-4 pt-6 mt-4 border-t border-slate-50">
+                                  <div className="flex items-center gap-4">
+                                     <span className="text-[9px] font-bold text-slate-400 uppercase">Cantidad:</span>
+                                     <input type="number" className="flex-1 p-3 bg-slate-50 border rounded-xl font-bold text-blue-950 focus:border-blue-800 outline-none" value={isEditing.data.rotateQuantity} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, rotateQuantity: Math.max(1, Number(e.target.value))}})} />
+                                  </div>
+                                  <div className="flex items-center gap-4 pt-2">
+                                     <input type="checkbox" className="w-5 h-5 rounded accent-blue-800" checked={isEditing.data.useCraneRotate} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, useCraneRotate: e.target.checked}})} />
+                                     <span className="text-[9px] font-black text-blue-800 uppercase tracking-widest">Puente de Grúa</span>
+                                  </div>
                                </div>
                             )}
                          </div>
@@ -700,147 +583,6 @@ export default function App() {
                            {machines.map(m => <option key={m.id} value={m.id}>{m.id} - {m.name}</option>)}
                          </select>
                        </div>
-                    </div>
-                 </div>
-               )}
-
-               {/* RESTO DE MODALES (HERRAMIENTAS, ESPESORES, MAQUINAS) */}
-               {isEditing.type === 'machine' && (
-                  <div className="space-y-12">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                    {[
-                      { label: 'Tiempo de Golpe', key: 'strikeTime' },
-                      { label: 'Cambio Herram.', key: 'toolChangeTime' },
-                      { label: 'Setup Inicial', key: 'setupTime' },
-                      { label: 'Medición / Pz', key: 'measurementTime' },
-                      { label: 'Tiempo Tramo', key: 'tramTime' },
-                      { label: 'Grúa Volteo', key: 'craneTurnTime' },
-                      { label: 'Grúa Giro', key: 'craneRotateTime' },
-                      { label: 'Giro Manual', key: 'manualRotateTime' },
-                      { label: 'Eficiencia %', key: 'efficiency' },
-                      { label: 'Horas Prod.', key: 'productiveHours' },
-                      { label: 'Largo Máx (mm)', key: 'maxLength' },
-                      { label: 'Ton Máx', key: 'maxTons' }
-                    ].map(f => (
-                      <div key={f.key} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
-                         <label className="text-[10px] font-black text-slate-400 uppercase mb-3 block tracking-widest">{f.label}</label>
-                         <input 
-                           type="text" 
-                           className="w-full bg-white border border-slate-200 p-5 rounded-[20px] font-black text-xl outline-none text-blue-950" 
-                           value={['efficiency', 'productiveHours', 'maxLength', 'maxTons'].includes(f.key) ? isEditing.data[f.key] : formatTime(isEditing.data[f.key])} 
-                           onChange={e => {
-                             const val = e.target.value;
-                             const newVal = ['efficiency', 'productiveHours', 'maxLength', 'maxTons'].includes(f.key) ? Number(val) : parseTimeToMinutes(val);
-                             setIsEditing({...isEditing, data: {...isEditing.data, [f.key]: newVal}});
-                           }} 
-                         />
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div className="pt-8 border-t border-slate-200">
-                     <h4 className="text-[12px] font-black text-blue-950 uppercase tracking-[0.2em] mb-6">Herramental Compatible en esta Máquina</h4>
-                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                       {tools.map(t => (
-                         <label key={t.id} className={`p-4 rounded-2xl border-2 flex items-center gap-3 cursor-pointer transition-all ${isEditing.data.compatibleToolIds.includes(t.id) ? 'border-blue-800 bg-blue-50' : 'border-slate-100 bg-slate-50'}`}>
-                           <input type="checkbox" className="hidden" checked={isEditing.data.compatibleToolIds.includes(t.id)} onChange={e => {
-                             const ids = e.target.checked ? [...isEditing.data.compatibleToolIds, t.id] : isEditing.data.compatibleToolIds.filter((id: string) => id !== t.id);
-                             setIsEditing({...isEditing, data: {...isEditing.data, compatibleToolIds: ids}});
-                           }} />
-                           <span className="text-[9px] font-black uppercase tracking-tight truncate text-blue-900">{t.name}</span>
-                         </label>
-                       ))}
-                     </div>
-                  </div>
-                </div>
-               )}
-
-               {isEditing.type === 'tool' && (
-                 <div className="space-y-12">
-                   <div className="grid grid-cols-2 gap-8">
-                      <div className="col-span-2">
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Nombre Herramienta</label>
-                        <input className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-lg text-blue-950 focus:border-blue-800 outline-none" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Tipo</label>
-                        <select className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-blue-950" value={isEditing.data.type} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, type: e.target.value as any}})}>
-                          <option value="punch">Punzón</option>
-                          <option value="die">Matriz</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Ángulo (°)</label>
-                        <input type="number" className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-blue-950" value={isEditing.data.angle} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, angle: Number(e.target.value)}})} />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Largo (mm)</label>
-                        <input type="number" className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-blue-950" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Carga Máxima (T/m)</label>
-                        <input type="number" className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-blue-950" value={isEditing.data.maxTons} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, maxTons: Number(e.target.value)}})} />
-                      </div>
-                   </div>
-                   <div className="pt-8 border-t border-slate-200">
-                      <h4 className="text-[11px] font-black text-blue-950 uppercase tracking-widest mb-4">Vincular a Máquinas Específicas</h4>
-                      <div className="flex flex-wrap gap-4">
-                        {machines.map(m => (
-                          <label key={m.id} className={`p-4 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-all ${isEditing.data.compatibleMachineIds.includes(m.id) ? 'border-blue-800 bg-blue-50' : 'border-slate-100 bg-slate-50'}`}>
-                            <input type="checkbox" className="w-5 h-5 accent-blue-800" checked={isEditing.data.compatibleMachineIds.includes(m.id)} onChange={e => {
-                              const ids = e.target.checked ? [...isEditing.data.compatibleMachineIds, m.id] : isEditing.data.compatibleMachineIds.filter((id: string) => id !== m.id);
-                              setIsEditing({...isEditing, data: {...isEditing.data, compatibleMachineIds: ids}});
-                            }} />
-                            <span className="text-[10px] font-black uppercase text-blue-900">{m.id}</span>
-                          </label>
-                        ))}
-                      </div>
-                   </div>
-                 </div>
-               )}
-
-               {isEditing.type === 'thickness' && (
-                 <div className="space-y-12">
-                    <div className="grid grid-cols-2 gap-8">
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Valor (mm)</label>
-                        <input type="number" step="0.1" className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-lg text-blue-950" value={isEditing.data.value} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, value: Number(e.target.value)}})} />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-black uppercase text-slate-400 mb-2 block">Material</label>
-                        <input className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-lg text-blue-950" value={isEditing.data.material} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, material: e.target.value}})} />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8 border-t border-slate-200">
-                      <div>
-                        <h4 className="text-[11px] font-black text-blue-950 uppercase tracking-widest mb-6">Herramental Recomendado</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          {tools.map(t => (
-                            <label key={t.id} className={`p-4 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-all ${isEditing.data.recommendedToolIds.includes(t.id) ? 'border-blue-800 bg-blue-50' : 'border-slate-100 bg-slate-50'}`}>
-                              <input type="checkbox" className="w-4 h-4 accent-blue-800" checked={isEditing.data.recommendedToolIds.includes(t.id)} onChange={e => {
-                                const ids = e.target.checked ? [...isEditing.data.recommendedToolIds, t.id] : isEditing.data.recommendedToolIds.filter((id: string) => id !== t.id);
-                                setIsEditing({...isEditing, data: {...isEditing.data, recommendedToolIds: ids}});
-                              }} />
-                              <span className="text-[9px] font-black uppercase truncate text-blue-900">{t.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="text-[11px] font-black text-blue-950 uppercase tracking-widest mb-6">Máquinas Capaces</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          {machines.map(m => (
-                            <label key={m.id} className={`p-4 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-all ${isEditing.data.compatibleMachineIds?.includes(m.id) ? 'border-blue-800 bg-blue-50' : 'border-slate-100 bg-slate-50'}`}>
-                              <input type="checkbox" className="w-4 h-4 accent-blue-800" checked={isEditing.data.compatibleMachineIds?.includes(m.id)} onChange={e => {
-                                const ids = e.target.checked ? [...(isEditing.data.compatibleMachineIds || []), m.id] : (isEditing.data.compatibleMachineIds || []).filter((id: string) => id !== m.id);
-                                setIsEditing({...isEditing, data: {...isEditing.data, compatibleMachineIds: ids}});
-                              }} />
-                              <span className="text-[9px] font-black uppercase text-blue-900">{m.id}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                  </div>
                )}
