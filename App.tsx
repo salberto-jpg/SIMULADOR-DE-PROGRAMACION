@@ -14,6 +14,45 @@ const LOGO_URL = "https://jcdbepgjoqxtnuarcwku.supabase.co/storage/v1/object/pub
 
 type TabType = 'schedule' | 'machines' | 'tools' | 'thickness' | 'records';
 
+// --- ICONOS SVG MINIMALISTAS ---
+const Icons = {
+  Schedule: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.375m1.875-3h1.875m-1.875 3h1.875M9 6.75h1.5m1.875 0h1.5m1.875 0H21m-9 3h7.5m-7.5 3h7.5m-7.5 3h7.5M3 6.75h1.5m1.875 0h1.5m1.875 0H9m-9 3h7.5m-7.5 3h7.5m-7.5 3h7.5M3 21a1.5 1.5 0 0 1-1.5-1.5V5.25A1.5 1.5 0 0 1 3 3.75h18a1.5 1.5 0 0 1 1.5 1.5v14.25a1.5 1.5 0 0 1-1.5 1.5H3Z" />
+    </svg>
+  ),
+  Machines: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0 0 15 0m-15 0a7.5 7.5 0 1 1 15 0m-15 0H3m16.5 0H21m-1.5 0H12m-8.457 3.077 1.41-.513m14.095-5.13 1.41-.513M5.106 17.785l1.15-.964m11.49-9.642 1.149-.964M7.501 19.795l.75-1.3m7.5-12.99.75-1.3m-6.06 15.633.13-1.494m0-12.427-.13-1.495m-3.477 14.39-.13-1.494m0-12.427.13-1.495m3.477 14.39a.75.75 0 0 1-1.385 0" />
+    </svg>
+  ),
+  Tools: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.423 20.242a3.375 3.375 0 0 1-4.773-4.773l3.174-3.174a.75.75 0 0 1 1.06 1.06l-3.174 3.174a1.875 1.875 0 1 0 2.651 2.651l3.174-3.174a.75.75 0 1 1 1.06 1.06l-3.174 3.174Zm3.899-8.04a3.375 3.375 0 0 1-4.773-4.773l3.174-3.174a.75.75 0 1 1 1.06 1.06l-3.174 3.174a1.875 1.875 0 1 0 2.651 2.651l3.174-3.174a.75.75 0 1 1 1.06 1.06l-3.174 3.174Z" />
+    </svg>
+  ),
+  Thickness: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v16.5m0-16.5h16.5m-16.5 0v16.5m16.5-16.5v16.5m0-16.5H3.75m16.5 16.5H3.75m0-16.5 16.5 16.5M3.75 20.25l16.5-16.5" />
+    </svg>
+  ),
+  Records: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+    </svg>
+  ),
+  Timer: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+  ),
+  Sun: () => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M3 12h2.25m.386-6.364 1.591 1.591M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+    </svg>
+  )
+};
+
 // Diccionario de traducción para parámetros técnicos
 const PARAM_LABELS: Record<string, string> = {
   strikeTime: "Tiempo de Golpe",
@@ -99,7 +138,7 @@ const MachineProductionCard: React.FC<{
       <div className="flex-1 p-4 md:p-5 space-y-3.5 overflow-y-auto scrollbar-hide">
         {daySlices.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center opacity-40">
-             <span className="text-3xl mb-2">🏖️</span>
+             <div className="mb-2 text-slate-300"><Icons.Sun /></div>
              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Día sin carga</div>
           </div>
         ) : (
@@ -312,11 +351,11 @@ export default function App() {
   };
 
   const NAV_ITEMS = [
-    { id: 'schedule', label: 'Producción', icon: '📋' },
-    { id: 'machines', label: 'Máquinas', icon: '⚙️' },
-    { id: 'tools', label: 'Herramental', icon: '🔧' },
-    { id: 'thickness', label: 'Espesores', icon: '📏' },
-    { id: 'records', label: 'Registros', icon: '📊' },
+    { id: 'schedule', label: 'Producción', icon: <Icons.Schedule /> },
+    { id: 'machines', label: 'Máquinas', icon: <Icons.Machines /> },
+    { id: 'tools', label: 'Herramental', icon: <Icons.Tools /> },
+    { id: 'thickness', label: 'Espesores', icon: <Icons.Thickness /> },
+    { id: 'records', label: 'Registros', icon: <Icons.Records /> },
   ];
 
   return (
@@ -373,7 +412,7 @@ export default function App() {
       {/* STOPWATCH FLOTANTE */}
       <div className={`fixed bottom-6 right-6 z-[60] bg-blue-950 text-white rounded-[32px] shadow-2xl transition-all duration-500 flex flex-col overflow-hidden ${isSwExpanded ? 'w-[calc(100vw-48px)] max-w-80 p-6 md:p-8' : 'w-16 h-16 md:w-20 md:h-20 items-center justify-center cursor-pointer hover:bg-blue-800'}`} onClick={() => !isSwExpanded && setIsSwExpanded(true)}>
         {!isSwExpanded ? (
-          <span className="text-xl md:text-2xl">⏱️</span>
+          <Icons.Timer />
         ) : (
           <div className="space-y-4 md:space-y-6">
             <div className="flex justify-between items-center">
@@ -509,14 +548,14 @@ export default function App() {
             <div className="space-y-8 md:space-y-10">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <h2 className="text-xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Inventario Herramental</h2>
-                <button onClick={() => setIsEditing({ type: 'tool', data: { id: `t-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: machines.map(m => m.id) } })} className="w-full sm:w-auto bg-blue-800 text-white px-7 py-3 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all">+ Nueva Herramienta</button>
+                <button onClick={() => setIsEditing({ type: 'tool', data: { id: `t-${Date.now()}`, name: '', type: 'punch', angle: 88, maxTons: 100, length: 835, compatibleMachineIds: [] } })} className="w-full sm:w-auto bg-blue-800 text-white px-7 py-3 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all">+ Nueva Herramienta</button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {tools.map(t => (
                   <div key={t.id} className="bg-white p-6 md:p-8 rounded-[28px] md:rounded-[32px] border border-slate-200 shadow-sm hover:shadow-xl transition-all group">
                     <span className={`text-[7px] md:text-[8px] font-black px-2 py-1 rounded-full uppercase mb-4 block w-fit ${t.type === 'punch' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>{t.type === 'punch' ? 'Punzón' : 'Matriz'}</span>
                     <h3 className="text-lg md:text-xl font-black text-blue-950 mb-1">{t.name}</h3>
-                    <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase mb-6">{t.angle}° • {t.length}mm • {t.maxTons}T</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-6">{t.angle}° • {t.length}mm • {t.maxTons}T</p>
                     <div className="flex gap-2">
                       <button onClick={() => setIsEditing({ type: 'tool', data: t })} className="flex-1 py-2.5 bg-slate-50 text-[9px] font-black uppercase text-blue-800 rounded-xl hover:bg-blue-50 transition-colors">Editar</button>
                       <button onClick={() => { if(confirm('¿Eliminar herramienta?')) deleteTool(t.id).then(loadData); }} className="py-2.5 px-3.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">&times;</button>
@@ -532,7 +571,7 @@ export default function App() {
             <div className="space-y-8 md:space-y-10">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <h2 className="text-xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Base de Espesores</h2>
-                <button onClick={() => setIsEditing({ type: 'thickness', data: { id: `th-${Date.now()}`, value: 1.5, material: 'Acero Carbono', recommendedToolIds: [], compatibleMachineIds: machines.map(m => m.id) } })} className="w-full sm:w-auto bg-blue-800 text-white px-7 py-3 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all">+ Nuevo Espesor</button>
+                <button onClick={() => setIsEditing({ type: 'thickness', data: { id: `th-${Date.now()}`, value: 1.5, material: 'Acero Carbono', recommendedToolIds: [], compatibleMachineIds: [] } })} className="w-full sm:w-auto bg-blue-800 text-white px-7 py-3 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all">+ Nuevo Espesor</button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {thicknesses.map(th => (
@@ -551,7 +590,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: REGISTROS (TARJETAS DE RENDIMIENTO EN ESPAÑOL) */}
+          {/* TAB: REGISTROS */}
           {activeTab === 'records' && (
             <div className="space-y-8 md:space-y-12">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -603,8 +642,8 @@ export default function App() {
               </div>
 
               {records.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 md:py-40 opacity-20">
-                   <span className="text-5xl md:text-6xl mb-6">📊</span>
+                <div className="flex flex-col items-center justify-center py-20 md:py-40 opacity-20 text-slate-300">
+                   <div className="mb-6"><Icons.Records /></div>
                    <p className="text-[11px] md:text-sm font-black uppercase tracking-[0.3em] text-blue-950 text-center px-6">Capture tiempos con el cronómetro para ver estadísticas</p>
                 </div>
               )}
@@ -877,7 +916,6 @@ export default function App() {
                  </div>
                )}
 
-               {/* FORMULARIO: TOOL / THICKNESS (SIMILAR REFINEMENT) */}
                {isEditing.type === 'tool' && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
                    <div className="space-y-6">
@@ -897,6 +935,22 @@ export default function App() {
                           <input type="number" className="w-full p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm" value={isEditing.data.angle} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, angle: Number(e.target.value)}})} />
                         </div>
                       </div>
+
+                      <div className="pt-4 border-t border-slate-100">
+                        <label className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 tracking-widest block mb-4">Plegadoras Compatibles</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {machines.map(m => (
+                            <label key={m.id} className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
+                              <input type="checkbox" className="w-4 h-4 accent-blue-800" checked={isEditing.data.compatibleMachineIds?.includes(m.id)} onChange={e => {
+                                const current = isEditing.data.compatibleMachineIds || [];
+                                const next = e.target.checked ? [...current, m.id] : current.filter((id: string) => id !== m.id);
+                                setIsEditing({...isEditing, data: {...isEditing.data, compatibleMachineIds: next}});
+                              }} />
+                              <span className="text-[10px] font-black text-blue-950 uppercase">{m.id}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                    </div>
                    <div className="space-y-6 bg-slate-50 p-6 md:p-8 rounded-[24px] md:rounded-[32px]">
                       <div className="grid grid-cols-2 gap-4 md:gap-6">
@@ -909,6 +963,12 @@ export default function App() {
                           <input type="number" className="w-full p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm" value={isEditing.data.length} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, length: Number(e.target.value)}})} />
                         </div>
                       </div>
+                      {isEditing.data.type === 'die' && (
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                          <label className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 block mb-1.5 md:mb-2">Ancho de V (mm)</label>
+                          <input type="number" className="w-full p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm" value={isEditing.data.vWidth || 0} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, vWidth: Number(e.target.value)}})} />
+                        </div>
+                      )}
                    </div>
                  </div>
                )}
@@ -921,14 +981,31 @@ export default function App() {
                       
                       <label className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 tracking-widest block">Material</label>
                       <input className="w-full p-5 md:p-6 bg-slate-50 border-2 border-slate-100 rounded-[20px] md:rounded-[28px] font-bold text-base md:text-xl outline-none focus:border-blue-800 transition-all" value={isEditing.data.material} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, material: e.target.value}})} placeholder="Ej: Acero Carbono" />
+
+                      <div className="pt-4 border-t border-slate-100">
+                        <label className="text-[10px] md:text-[11px] font-black uppercase text-slate-400 tracking-widest block mb-4">Plegadoras Compatibles</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {machines.map(m => (
+                            <label key={m.id} className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
+                              <input type="checkbox" className="w-4 h-4 accent-blue-800" checked={isEditing.data.compatibleMachineIds?.includes(m.id)} onChange={e => {
+                                const current = isEditing.data.compatibleMachineIds || [];
+                                const next = e.target.checked ? [...current, m.id] : current.filter((id: string) => id !== m.id);
+                                setIsEditing({...isEditing, data: {...isEditing.data, compatibleMachineIds: next}});
+                              }} />
+                              <span className="text-[10px] font-black text-blue-950 uppercase">{m.id}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                    </div>
                    <div className="bg-slate-50 p-6 md:p-8 rounded-[24px] md:rounded-[32px] space-y-6">
                       <h4 className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Herramental Recomendado</h4>
                       <div className="max-h-60 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
                         {tools.map(tool => (
                           <label key={tool.id} className="flex items-center gap-3 md:gap-4 bg-white p-3 md:p-4 rounded-xl border border-slate-100 cursor-pointer hover:bg-blue-50 transition-colors">
-                            <input type="checkbox" className="w-5 h-5 flex-shrink-0 accent-blue-800" checked={isEditing.data.recommendedToolIds.includes(tool.id)} onChange={e => {
-                              const newIds = e.target.checked ? [...isEditing.data.recommendedToolIds, tool.id] : isEditing.data.recommendedToolIds.filter((id: string) => id !== tool.id);
+                            <input type="checkbox" className="w-5 h-5 flex-shrink-0 accent-blue-800" checked={isEditing.data.recommendedToolIds?.includes(tool.id)} onChange={e => {
+                              const currentIds = isEditing.data.recommendedToolIds || [];
+                              const newIds = e.target.checked ? [...currentIds, tool.id] : currentIds.filter((id: string) => id !== tool.id);
                               setIsEditing({...isEditing, data: {...isEditing.data, recommendedToolIds: newIds}});
                             }} />
                             <div className="flex-1 min-w-0">
@@ -947,12 +1024,17 @@ export default function App() {
                <button onClick={() => setIsEditing(null)} className="order-2 md:order-1 flex-1 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] md:tracking-[0.3em] hover:text-slate-600 transition-colors">Cerrar</button>
                <button 
                  onClick={async () => {
-                   if (isEditing.type === 'batch') await handleSaveBatchAction(isEditing.data);
-                   else if (isEditing.type === 'machine') await handleSaveMachineAction(isEditing.data);
-                   else if (isEditing.type === 'tool') await saveTool(isEditing.data);
-                   else if (isEditing.type === 'thickness') await saveThickness(isEditing.data);
-                   setIsEditing(null);
-                   loadData();
+                   try {
+                     if (isEditing.type === 'batch') await handleSaveBatchAction(isEditing.data);
+                     else if (isEditing.type === 'machine') await handleSaveMachineAction(isEditing.data);
+                     else if (isEditing.type === 'tool') await saveTool(isEditing.data);
+                     else if (isEditing.type === 'thickness') await saveThickness(isEditing.data);
+                     setIsEditing(null);
+                     loadData();
+                   } catch (err) {
+                     console.error("Error al guardar:", err);
+                     alert(err instanceof Error ? err.message : "Error desconocido al guardar en la nube.");
+                   }
                  }} 
                  className="order-1 md:order-2 flex-[2] bg-blue-800 text-white py-4 md:py-6 rounded-[16px] md:rounded-[32px] font-black text-[11px] md:text-[13px] uppercase tracking-[0.2em] md:tracking-[0.3em] shadow-2xl shadow-blue-900/40 hover:bg-blue-900 transition-all active:scale-95"
                >
