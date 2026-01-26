@@ -64,7 +64,12 @@ const PARAM_LABELS: Record<string, string> = {
   craneRotateTime: "Giro con Grúa",
   manualTurnTime: "Volteo Manual",
   manualRotateTime: "Giro Manual",
-  totalTime: "Tiempo Total de Lote"
+  totalTime: "Tiempo Total de Lote",
+  // Parámetros Rotolaser
+  rotolaser_giro_corte: "Velocidad de giro CORTE",
+  rotolaser_giro_radio_chico: "Velocidad de giro RADIO CHICO",
+  rotolaser_pincazo: "Pincazo",
+  rotolaser_movimiento_vacio: "Movimiento en vacío"
 };
 
 // --- COMPONENTE DE ENTRADA DE TIEMPO ---
@@ -210,12 +215,26 @@ export default function App() {
   const [swTime, setSwTime] = useState(0); 
   const [swIsRunning, setSwIsRunning] = useState(false);
   const [swMachine, setSwMachine] = useState('PL-01');
-  const [swParam, setSwParam] = useState<keyof MachineConfig | 'totalTime'>('strikeTime');
+  const [swParam, setSwParam] = useState<string>('strikeTime');
   const [isSwExpanded, setIsSwExpanded] = useState(false);
   
   const swIntervalRef = useRef<any>(null);
   const swStartTimeRef = useRef<number | null>(null); 
   const swAccumulatedSecsRef = useRef<number>(0); 
+
+  // Detectar si la máquina actual es Rotolaser
+  const isRotolaserSelected = useMemo(() => {
+    return swMachine.toUpperCase().includes('ROTOLASER');
+  }, [swMachine]);
+
+  // Forzar cambio de parámetro si cambia a/desde Rotolaser
+  useEffect(() => {
+    if (isRotolaserSelected) {
+      setSwParam('rotolaser_giro_corte');
+    } else {
+      setSwParam('strikeTime');
+    }
+  }, [isRotolaserSelected]);
 
   useEffect(() => {
     if (swIsRunning) {
@@ -426,17 +445,28 @@ export default function App() {
               <select className="w-full bg-blue-900/50 p-3 rounded-xl text-[10px] font-bold uppercase border border-blue-800" value={swMachine} onChange={e => setSwMachine(e.target.value)}>
                 {machines.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
               </select>
-              <select className="w-full bg-blue-900/50 p-3 rounded-xl text-[10px] font-bold uppercase border border-blue-800" value={swParam} onChange={e => setSwParam(e.target.value as any)}>
-                <option value="totalTime">Tiempo de Lote</option>
-                <option value="strikeTime">Tiempo de Golpe</option>
-                <option value="toolChangeTime">Cambio Herramental</option>
-                <option value="setupTime">Setup Inicial</option>
-                <option value="measurementTime">Medición / Pz</option>
-                <option value="tramTime">Tiempo de Tramo</option>
-                <option value="craneTurnTime">Grúa Volteo</option>
-                <option value="craneRotateTime">Grúa Giro</option>
-                <option value="manualTurnTime">Volteo Manual</option>
-                <option value="manualRotateTime">Giro Manual</option>
+              <select className="w-full bg-blue-900/50 p-3 rounded-xl text-[10px] font-bold uppercase border border-blue-800" value={swParam} onChange={e => setSwParam(e.target.value)}>
+                {isRotolaserSelected ? (
+                  <>
+                    <option value="rotolaser_giro_corte">Velocidad de giro CORTE</option>
+                    <option value="rotolaser_giro_radio_chico">Velocidad de giro RADIO CHICO</option>
+                    <option value="rotolaser_pincazo">Pincazo</option>
+                    <option value="rotolaser_movimiento_vacio">Movimiento en vacío</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="totalTime">Tiempo de Lote</option>
+                    <option value="strikeTime">Tiempo de Golpe</option>
+                    <option value="toolChangeTime">Cambio Herramental</option>
+                    <option value="setupTime">Setup Inicial</option>
+                    <option value="measurementTime">Medición / Pz</option>
+                    <option value="tramTime">Tiempo de Tramo</option>
+                    <option value="craneTurnTime">Grúa Volteo</option>
+                    <option value="craneRotateTime">Grúa Giro</option>
+                    <option value="manualTurnTime">Volteo Manual</option>
+                    <option value="manualRotateTime">Giro Manual</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -516,7 +546,36 @@ export default function App() {
           {/* TAB: MÁQUINAS */}
           {activeTab === 'machines' && (
             <div className="space-y-8 md:space-y-10">
-              <h2 className="text-xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Gestión de Máquinas</h2>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <h2 className="text-xl md:text-3xl font-black text-blue-950 uppercase tracking-tighter">Gestión de Máquinas</h2>
+                <button 
+                  onClick={() => setIsEditing({ 
+                    type: 'machine', 
+                    data: { 
+                      id: `M-${Date.now()}`, 
+                      name: '', 
+                      description: '',
+                      strikeTime: 0.005,
+                      toolChangeTime: 5,
+                      setupTime: 10,
+                      measurementTime: 0.5,
+                      tramTime: 3,
+                      craneTurnTime: 1,
+                      craneRotateTime: 1,
+                      manualTurnTime: 0.05,
+                      manualRotateTime: 0.05,
+                      efficiency: 100,
+                      productiveHours: 8,
+                      maxLength: 3000,
+                      maxTons: 100,
+                      compatibleToolIds: []
+                    } 
+                  })} 
+                  className="w-full sm:w-auto bg-blue-800 text-white px-7 py-3 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-900 transition-all"
+                >
+                  + Nueva Máquina
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
                 {machines.map(m => (
                   <div key={m.id} className="bg-white p-6 md:p-10 rounded-[32px] md:rounded-[48px] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group">
@@ -823,8 +882,12 @@ export default function App() {
                        <h4 className="text-[10px] md:text-[11px] font-black text-blue-950 uppercase tracking-widest mb-4 md:mb-6">Información General</h4>
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                           <div className="group">
+                             <label className="text-[9px] md:text-[11px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Identificador de Máquina (ID)</label>
+                             <input className="w-full bg-slate-50 border-2 border-slate-100 p-4 md:p-6 rounded-[20px] md:rounded-[28px] font-bold text-base md:text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.id} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, id: e.target.value.toUpperCase()}})} placeholder="Ej: PL-04 o ROTOLASER-01" />
+                          </div>
+                          <div className="group">
                              <label className="text-[9px] md:text-[11px] font-black uppercase text-slate-400 mb-2 block tracking-widest">Nombre de Máquina</label>
-                             <input className="w-full bg-slate-50 border-2 border-slate-100 p-4 md:p-6 rounded-[20px] md:rounded-[28px] font-bold text-base md:text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} />
+                             <input className="w-full bg-slate-50 border-2 border-slate-100 p-4 md:p-6 rounded-[20px] md:rounded-[28px] font-bold text-base md:text-xl outline-none focus:border-blue-800 transition-all text-blue-950" value={isEditing.data.name} onChange={e => setIsEditing({...isEditing, data: {...isEditing.data, name: e.target.value}})} placeholder="Nombre descriptivo" />
                           </div>
                           <div className="grid grid-cols-2 gap-4 md:gap-6">
                              <div>
