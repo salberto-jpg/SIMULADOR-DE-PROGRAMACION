@@ -5,7 +5,7 @@ import { MachineConfig, Batch, Tool, Thickness, TimeRecord } from './types';
 import { 
   initSupabase, fetchMachines, fetchBatches, fetchTools, fetchThicknesses,
   subscribeToChanges, saveTimeRecord, fetchTimeRecords, saveBatch, saveMachine,
-  saveTool, saveThickness, deleteTool, deleteThickness, deleteBatchFromCloud
+  saveTool, saveThickness, deleteTool, deleteThickness, deleteBatchFromCloud, syncAppData
 } from './services/supabaseService';
 
 // Importación de componentes modulares
@@ -57,9 +57,11 @@ export default function App() {
       const [m, b, t, th, r] = await Promise.all([
         fetchMachines(), fetchBatches(), fetchTools(), fetchThicknesses(), fetchTimeRecords()
       ]);
+      
       const sortedMachines = (m.length ? m : INITIAL_MACHINES).sort((a, b) => 
         a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' })
       );
+      
       setMachines(sortedMachines);
       setBatches(b);
       setTools(t);
@@ -70,6 +72,56 @@ export default function App() {
       console.error("Error cargando datos:", e);
       setStatus("Error de conexión");
     }
+  };
+
+  const handleExportData = () => {
+    const dataToExport = {
+      machines,
+      batches,
+      tools,
+      thicknesses,
+      records,
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `METALLO_BACKUP_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    setStatus("Respaldo Descargado");
+    setTimeout(() => setStatus(""), 3000);
+  };
+
+  const handleImportData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e: any) => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = async (re: any) => {
+        try {
+          const imported = JSON.parse(re.target.result);
+          if (confirm("¿Deseas restaurar estos datos y subirlos a la nube? Esto reemplazará lo actual.")) {
+            setStatus("Restaurando...");
+            await syncAppData(imported.machines || [], imported.batches || []);
+            // También subir herramientas y espesores si vienen en el JSON
+            for (const t of (imported.tools || [])) await saveTool(t);
+            for (const th of (imported.thicknesses || [])) await saveThickness(th);
+            for (const r of (imported.records || [])) await saveTimeRecord(r);
+            
+            loadData();
+            setStatus("Datos Restaurados");
+            setTimeout(() => setStatus(""), 3000);
+          }
+        } catch (err) {
+          alert("Error al leer el archivo de respaldo.");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   };
 
   const handleCaptureTime = async (machineId: string, parameter: string, value: number) => {
@@ -109,6 +161,8 @@ export default function App() {
         onTabChange={setActiveTab}
         onToggle={setIsSidebarOpen}
         navItems={navItems}
+        onExport={handleExportData}
+        onImport={handleImportData}
       />
 
       <Stopwatch machines={machines} onCapture={handleCaptureTime} />

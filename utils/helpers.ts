@@ -86,6 +86,16 @@ export interface BatchSlice {
   hasMore: boolean;
 }
 
+const getNextBusinessDay = (dateStr: string): string => {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  // Saltar Sábado (6) y Domingo (0)
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d.toISOString().split('T')[0];
+};
+
 export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Batch[]): BatchSlice[] => {
   const machineBatches = allBatches
     .filter(b => b.machineId === machine.id)
@@ -105,9 +115,7 @@ export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Bat
       const capacityLeft = dailyCapacity - dailyTimeUsed[currentDateStr];
       
       if (capacityLeft <= 0) {
-        const nextDate = new Date(currentDateStr);
-        nextDate.setDate(nextDate.getDate() + 1);
-        currentDateStr = nextDate.toISOString().split('T')[0];
+        currentDateStr = getNextBusinessDay(currentDateStr);
         continue;
       }
 
@@ -125,9 +133,7 @@ export const getMachineTimelineSlices = (machine: MachineConfig, allBatches: Bat
 
       if (remainingTime > 0) {
         isContinuation = true;
-        const nextDate = new Date(currentDateStr);
-        nextDate.setDate(nextDate.getDate() + 1);
-        currentDateStr = nextDate.toISOString().split('T')[0];
+        currentDateStr = getNextBusinessDay(currentDateStr);
       }
     }
   });

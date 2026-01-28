@@ -10,9 +10,13 @@ interface SidebarProps {
   onTabChange: (tab: any) => void;
   onToggle: (val: boolean) => void;
   navItems: Array<{ id: string; label: string; icon: React.ReactNode }>;
+  onExport: () => void;
+  onImport: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, activeTab, onTabChange, onToggle, navItems }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  isOpen, activeTab, onTabChange, onToggle, navItems, onExport, onImport 
+}) => {
   return (
     <aside 
       onMouseEnter={() => onToggle(true)}
@@ -24,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, activeTab, onTabChange
         <h1 className={`text-sm font-black tracking-tighter uppercase leading-none transition-opacity ${!isOpen && 'opacity-0'}`}>METALLO</h1>
       </div>
 
-      <nav className="flex-1 py-8 px-4 space-y-2">
+      <nav className="flex-1 py-8 px-4 space-y-2 overflow-y-auto scrollbar-hide">
         {navItems.map(item => (
           <button
             key={item.id}
@@ -36,6 +40,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, activeTab, onTabChange
           </button>
         ))}
       </nav>
+
+      {/* Sección de Emergencia / Respaldo */}
+      <div className={`p-6 border-t border-blue-900 space-y-3 transition-opacity duration-300 ${!isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Gestión de Datos</p>
+        <button 
+          onClick={onExport}
+          className="w-full flex items-center gap-3 p-3 rounded-xl bg-blue-900/30 hover:bg-blue-800 text-[9px] font-black uppercase tracking-widest transition-colors"
+        >
+          <span>📥</span> Exportar Respaldo
+        </button>
+        <button 
+          onClick={onImport}
+          className="w-full flex items-center gap-3 p-3 rounded-xl bg-blue-900/30 hover:bg-blue-800 text-[9px] font-black uppercase tracking-widest transition-colors"
+        >
+          <span>📤</span> Importar Respaldo
+        </button>
+      </div>
     </aside>
   );
 };

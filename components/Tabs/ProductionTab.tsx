@@ -32,6 +32,38 @@ export const ProductionTab: React.FC<ProductionTabProps> = ({
     }
   };
 
+  const handleAddNewBatch = () => {
+    // Lógica para obtener el día laboral actual o siguiente
+    let today = new Date();
+    const day = today.getDay();
+    if (day === 0) today.setDate(today.getDate() + 1); // Domingo a Lunes
+    else if (day === 6) today.setDate(today.getDate() + 2); // Sábado a Lunes
+    
+    const defaultDate = today.toISOString().split('T')[0];
+
+    onEdit({ 
+      id: `b-${Date.now()}`, 
+      name: '', 
+      machineId: machines[0]?.id || 'PL-01', 
+      pieces: 10, 
+      strikesPerPiece: 4, 
+      thickness: 1.5,
+      // Los parámetros físicos se mantienen ocultos pero con valores base
+      length: 500,
+      width: 250,
+      turnQuantity: 0,
+      rotateQuantity: 0,
+      useCraneTurn: false,
+      useCraneRotate: false,
+      trams: 0,
+      toolChanges: 0,
+      requiresToolChange: false,
+      scheduledDate: defaultDate, 
+      priority: 'medium', 
+      isSimulation: true 
+    });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-5">
@@ -46,7 +78,7 @@ export const ProductionTab: React.FC<ProductionTabProps> = ({
             value={selectedDate}
             onChange={e => onDateChange(e.target.value)}
           />
-          <button onClick={() => onEdit({ id: `b-${Date.now()}`, name: '', machineId: machines[0]?.id, pieces: 10, strikesPerPiece: 4, scheduledDate: selectedDate, priority: 'medium', isSimulation: true })} className="bg-blue-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">
+          <button onClick={handleAddNewBatch} className="bg-blue-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">
             + Nuevo Lote
           </button>
           <button onClick={handleOptimize} className="bg-blue-950 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest">

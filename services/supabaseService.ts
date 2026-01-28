@@ -145,8 +145,13 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
     try {
       if (m.description && m.description.startsWith('{')) {
         techData = JSON.parse(m.description);
+      } else if (m.description) {
+        // Si la descripción existe pero no es JSON, la guardamos como nota informativa
+        techData = { description: m.description };
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Fallo al parsear datos técnicos de máquina:", m.id);
+    }
 
     return {
       ...defaultConfig,
@@ -232,8 +237,9 @@ export const fetchTimeRecords = async (): Promise<TimeRecord[]> => {
 export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) => {
   const client = getClient();
   if (!client) return;
-  for (const m of machines) await saveMachine(m);
-  for (const b of batches) await saveBatch(b);
+  // Sincronización robusta: iterar y guardar uno a uno
+  for (const m of machines) await saveMachine(m).catch(e => console.error(e));
+  for (const b of batches) await saveBatch(b).catch(e => console.error(e));
 };
 
 export const deleteBatchFromCloud = async (id: string) => {
