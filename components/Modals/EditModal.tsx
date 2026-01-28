@@ -1,6 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { TimeInput } from '../Shared/TimeInput';
+import { calculateBatchTime } from '../../utils/helpers';
 import { Icons } from '../Icons';
 
 interface EditModalProps {
@@ -42,6 +43,20 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleSave = async () => {
+    let finalData = { ...data };
+    
+    // Si es un lote, calculamos el tiempo total antes de guardar
+    if (editing.type === 'batch') {
+      const selectedMachine = machines.find(m => m.id === data.machineId) || machines[0];
+      if (selectedMachine) {
+        finalData.totalTime = calculateBatchTime(finalData, selectedMachine);
+      }
+    }
+    
+    await onSave(finalData);
   };
 
   return (
@@ -118,7 +133,7 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
             /* CARGA MANUAL DE LOTE CON MANIOBRAS */
             <div className="space-y-10">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-8 space-y-6">
+                <div className="lg:col-span-9 space-y-6">
                   <div className="space-y-2">
                     <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest">Nombre del Lote</label>
                     <input 
@@ -147,26 +162,26 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
                   </div>
                 </div>
                 
-                <div className="lg:col-span-4 space-y-2">
+                <div className="lg:col-span-3 space-y-2">
                   <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest block text-center lg:text-left">Referencia Visual</label>
                   <div 
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full aspect-square bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-800/30 transition-all overflow-hidden relative group shadow-sm"
+                    className="w-full aspect-square max-w-[160px] mx-auto lg:mx-0 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-800/30 transition-all overflow-hidden relative group shadow-sm"
                   >
                     {data.imageUrl ? (
                       <>
                         <img src={data.imageUrl} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-blue-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                          <span className="text-white font-black text-[10px] uppercase">Cambiar Foto</span>
+                          <span className="text-white font-black text-[9px] uppercase px-2 text-center">Cambiar Foto</span>
                         </div>
                       </>
                     ) : (
-                      <div className="text-center p-6">
-                        <span className="text-4xl mb-2 block">📸</span>
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Añadir Imagen</span>
+                      <div className="text-center p-4">
+                        <span className="text-2xl mb-1 block">📸</span>
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Añadir Imagen</span>
                       </div>
                     )}
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
                   </div>
                 </div>
               </div>
@@ -245,7 +260,7 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
         <div className="p-8 bg-slate-50 border-t flex flex-col md:flex-row gap-4">
           <button onClick={onClose} className="flex-1 py-4 font-black uppercase text-slate-400 text-[11px] tracking-widest hover:text-slate-600 transition-colors">Cancelar</button>
           <button 
-            onClick={() => onSave(data)} 
+            onClick={handleSave} 
             className="flex-[2] bg-blue-800 text-white py-4 rounded-[28px] font-black uppercase text-[11px] tracking-[0.2em] shadow-xl hover:bg-blue-700 transition-all transform active:scale-95"
           >
             Guardar Configuración
