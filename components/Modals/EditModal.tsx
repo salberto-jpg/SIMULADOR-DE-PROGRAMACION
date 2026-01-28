@@ -19,6 +19,10 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
     thickness: 1.5,
     trams: 0,
     toolChanges: 0,
+    turnQuantity: 0,
+    rotateQuantity: 0,
+    useCraneTurn: false,
+    useCraneRotate: false,
     requiresToolChange: false,
     scheduledDate: new Date().toISOString().split('T')[0],
     ...editing.data
@@ -42,7 +46,7 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
 
   return (
     <div className="fixed inset-0 z-[100] bg-blue-950/80 backdrop-blur-sm flex items-center justify-center p-4 md:p-6">
-      <div className="bg-white w-full max-w-4xl rounded-[48px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white w-full max-w-5xl rounded-[48px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="p-8 bg-blue-950 text-white flex justify-between items-center">
@@ -111,14 +115,14 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
               </div>
             </div>
           ) : (
-            /* CARGA MANUAL DE LOTE SIMPLIFICADA */
-            <div className="space-y-8">
+            /* CARGA MANUAL DE LOTE CON MANIOBRAS */
+            <div className="space-y-10">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div className="lg:col-span-8 space-y-6">
                   <div className="space-y-2">
                     <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest">Nombre del Lote</label>
                     <input 
-                      className="w-full p-6 bg-slate-50 border-2 border-transparent focus:border-blue-800 focus:bg-white rounded-3xl font-black text-xl text-blue-950 outline-none transition-all placeholder:text-slate-300 shadow-sm" 
+                      className="w-full p-6 bg-slate-50 border-2 border-transparent focus:border-blue-800 focus:bg-white rounded-[32px] font-black text-xl text-blue-950 outline-none transition-all placeholder:text-slate-300 shadow-sm" 
                       value={data.name} 
                       onChange={e => updateData('name', e.target.value)} 
                       placeholder="Ej: PANEL FRONTAL X-1" 
@@ -144,7 +148,7 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
                 </div>
                 
                 <div className="lg:col-span-4 space-y-2">
-                  <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest block">Referencia Visual</label>
+                  <label className="text-[11px] font-black uppercase text-slate-400 ml-2 tracking-widest block text-center lg:text-left">Referencia Visual</label>
                   <div 
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full aspect-square bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-800/30 transition-all overflow-hidden relative group shadow-sm"
@@ -167,16 +171,47 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
                 </div>
               </div>
 
-              {/* Especificaciones y Parámetros */}
+              {/* Logística de Maniobras (Volteo y Giro) */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-6 bg-blue-800 rounded-full"></div>
+                  <h4 className="text-[11px] font-black text-blue-950 uppercase tracking-[0.2em]">Logística de Maniobras</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black uppercase text-blue-950">Volteos / Pieza</label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Usar Grúa</span>
+                        <input type="checkbox" className="w-5 h-5 rounded-lg border-2 border-slate-300 checked:bg-blue-800 transition-colors" checked={data.useCraneTurn} onChange={e => updateData('useCraneTurn', e.target.checked)} />
+                      </label>
+                    </div>
+                    <input type="number" className="w-full p-4 bg-white border-2 border-transparent focus:border-blue-800 rounded-2xl font-bold outline-none shadow-sm" value={data.turnQuantity} onChange={e => updateData('turnQuantity', Number(e.target.value))} />
+                  </div>
+                  
+                  <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black uppercase text-blue-950">Giros / Pieza</label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Usar Grúa</span>
+                        <input type="checkbox" className="w-5 h-5 rounded-lg border-2 border-slate-300 checked:bg-blue-800 transition-colors" checked={data.useCraneRotate} onChange={e => updateData('useCraneRotate', e.target.checked)} />
+                      </label>
+                    </div>
+                    <input type="number" className="w-full p-4 bg-white border-2 border-transparent focus:border-blue-800 rounded-2xl font-bold outline-none shadow-sm" value={data.rotateQuantity} onChange={e => updateData('rotateQuantity', Number(e.target.value))} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Especificaciones y Parámetros Finales */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <div className="p-6 bg-slate-50/50 rounded-[32px] border border-slate-100">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2 block mb-3">Espesor del Material (mm)</label>
-                    <input type="number" step="0.1" className="w-full p-5 bg-white border-2 border-transparent focus:border-blue-800 rounded-2xl font-bold outline-none shadow-sm" value={data.thickness} onChange={e => updateData('thickness', Number(e.target.value))} />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 block mb-1">Espesor del Material (mm)</label>
+                  <div className="p-2 bg-slate-50 rounded-[28px] border border-slate-100">
+                    <input type="number" step="0.1" className="w-full p-4 bg-white border-2 border-transparent focus:border-blue-800 rounded-2xl font-bold outline-none shadow-sm" value={data.thickness} onChange={e => updateData('thickness', Number(e.target.value))} />
                   </div>
                 </div>
 
-                <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 flex flex-col justify-center space-y-4">
+                <div className="p-6 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col justify-center space-y-4">
                   <label className="flex items-center gap-4 cursor-pointer group">
                     <div className="relative">
                       <input type="checkbox" className="sr-only peer" checked={data.requiresToolChange} onChange={e => updateData('requiresToolChange', e.target.checked)} />
@@ -184,19 +219,19 @@ export const EditModal: React.FC<EditModalProps> = ({ editing, machines, onClose
                         <span className={`text-white text-xl transition-opacity ${data.requiresToolChange ? 'opacity-100' : 'opacity-0'}`}>✓</span>
                       </div>
                     </div>
-                    <span className="text-[12px] font-black uppercase text-blue-900 tracking-wider group-hover:text-blue-700 transition-colors">¿Requiere cambio de herramental?</span>
+                    <span className="text-[11px] font-black uppercase text-blue-900 tracking-wider group-hover:text-blue-700 transition-colors">¿Requiere cambio de herramental?</span>
                   </label>
 
                   {/* Parámetros de Proceso CONDICIONALES */}
                   {data.requiresToolChange && (
-                    <div className="grid grid-cols-2 gap-4 pt-4 animate-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-2 gap-4 pt-2 animate-in slide-in-from-top-2 duration-300">
                       <div className="space-y-1">
                         <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Tramos Extra</label>
-                        <input type="number" className="w-full p-4 bg-white border-2 border-transparent focus:border-blue-800 rounded-xl font-bold outline-none shadow-sm" value={data.trams} onChange={e => updateData('trams', Number(e.target.value))} />
+                        <input type="number" className="w-full p-3 bg-white border-2 border-transparent focus:border-blue-800 rounded-xl font-bold outline-none shadow-sm" value={data.trams} onChange={e => updateData('trams', Number(e.target.value))} />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Cant. Cambios Herr.</label>
-                        <input type="number" className="w-full p-4 bg-white border-2 border-transparent focus:border-blue-800 rounded-xl font-bold outline-none shadow-sm" value={data.toolChanges} onChange={e => updateData('toolChanges', Number(e.target.value))} />
+                        <input type="number" className="w-full p-3 bg-white border-2 border-transparent focus:border-blue-800 rounded-xl font-bold outline-none shadow-sm" value={data.toolChanges} onChange={e => updateData('toolChanges', Number(e.target.value))} />
                       </div>
                     </div>
                   )}
