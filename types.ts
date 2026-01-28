@@ -69,7 +69,8 @@ export interface Batch {
 export interface TimeRecord {
   id: string;
   machineId: string;
-  parameter: string; // Cambiado a string para mayor flexibilidad (Rotolaser, etc)
+  parameter: string; // Cambiado a string para soportar parámetros dinámicos (ROTOLASER, etc)
   value: number;
   timestamp: string;
+  length?: number; // Valor adjunto para registros de longitud
 }

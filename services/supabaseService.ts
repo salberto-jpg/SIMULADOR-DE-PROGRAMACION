@@ -145,13 +145,8 @@ export const fetchMachines = async (): Promise<MachineConfig[]> => {
     try {
       if (m.description && m.description.startsWith('{')) {
         techData = JSON.parse(m.description);
-      } else if (m.description) {
-        // Si la descripción existe pero no es JSON, la guardamos como nota informativa
-        techData = { description: m.description };
       }
-    } catch (e) {
-      console.warn("Fallo al parsear datos técnicos de máquina:", m.id);
-    }
+    } catch (e) {}
 
     return {
       ...defaultConfig,
@@ -230,16 +225,16 @@ export const fetchTimeRecords = async (): Promise<TimeRecord[]> => {
     machineId: r.machine_id, 
     parameter: r.type, 
     value: r.observed_time, 
-    timestamp: r.timestamp
+    timestamp: r.timestamp,
+    length: r.length // Se asume que la columna existe o se guardó anteriormente
   }));
 };
 
 export const syncAppData = async (machines: MachineConfig[], batches: Batch[]) => {
   const client = getClient();
   if (!client) return;
-  // Sincronización robusta: iterar y guardar uno a uno
-  for (const m of machines) await saveMachine(m).catch(e => console.error(e));
-  for (const b of batches) await saveBatch(b).catch(e => console.error(e));
+  for (const m of machines) await saveMachine(m);
+  for (const b of batches) await saveBatch(b);
 };
 
 export const deleteBatchFromCloud = async (id: string) => {
@@ -255,6 +250,7 @@ export const saveTimeRecord = async (record: TimeRecord) => {
     type: record.parameter,
     observed_time: record.value,
     timestamp: record.timestamp,
-    operator_notes: "Stopwatch Capture"
+    operator_notes: "Stopwatch Capture",
+    length: record.length // Se añade el campo longitud al insertar
   }]);
 };
